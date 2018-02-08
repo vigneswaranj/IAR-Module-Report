@@ -1,0 +1,1552 @@
+###############################################################################
+#                                                                             #
+# IAR C/C++ Compiler V5.10.1.50144/W32 for MSP430       04/Jan/2018  16:34:18 #
+# Copyright 1996-2010 IAR Systems AB.                                         #
+#                                                                             #
+#    __rt_version  =  3                                                       #
+#    __double_size =  32                                                      #
+#    __reg_r4      =  free                                                    #
+#    __reg_r5      =  free                                                    #
+#    __pic         =  no                                                      #
+#    __core        =  430                                                     #
+#    Source file   =  E:\VT1 V4.95\FW\VT1\Source\measurement.c                #
+#    Command line  =  "E:\VT1 V4.95\FW\VT1\Source\measurement.c" -lCN         #
+#                     "E:\VT1 V4.95\FW\VT1\Debug\List\" -la "E:\VT1           #
+#                     V4.95\FW\VT1\Debug\List\" -o "E:\VT1                    #
+#                     V4.95\FW\VT1\Debug\Obj\" --no_cse --no_unroll           #
+#                     --no_inline --no_code_motion --no_tbaa --debug          #
+#                     -D__MSP430F149__ -e --double=32 --dlib_config           #
+#                     "C:\Program Files (x86)\IAR Systems\Embedded Workbench  #
+#                     6.0\430\LIB\DLIB\dl430fn.h" -I "E:\VT1                  #
+#                     V4.95\FW\VT1\Header\" -On --multiplier=16               #
+#    List file     =  E:\VT1 V4.95\FW\VT1\Debug\List\measurement.lst          #
+#    Object file   =  E:\VT1 V4.95\FW\VT1\Debug\Obj\measurement.r43           #
+#                                                                             #
+#                                                                             #
+###############################################################################
+
+E:\VT1 V4.95\FW\VT1\Source\measurement.c
+      1          /** @file name - measurement.c
+      2          *
+      3          * @description - This module measures the line current and executes the
+      4          * asymmetric computational algorithm. The mean square current is calculated
+      5          * at the half cycle rate and the computated mean square is passed to the
+      6          * protection module and system control module.
+      7          *
+      8          *  Versa-Tech I Single-Phase Recloser - Hubbell Power Systems, Inc.
+      9          *  This code is the intellectual property of Hubbell Power Systems, Inc. and
+     10          *  it should not be used, reproduced, modified in any manner by anyone else.
+     11          *
+     12          * @ Project ID  : UA002
+     13          * @ Author      : Hubbell India
+     14          * @ Version     : 4.X LPM
+     15          * @ Date        : 25 Sep 2017
+     16          *
+     17          **/
+     18          #include <msp430.h>
+
+   \                                 In  segment DATA16_AN, at 0x1a0
+   \   unsigned short volatile ADC12CTL0
+   \                     ADC12CTL0:
+   \   000000                DS8 2
+
+   \                                 In  segment DATA16_AN, at 0x1a2
+   \   unsigned short volatile ADC12CTL1
+   \                     ADC12CTL1:
+   \   000000                DS8 2
+
+   \                                 In  segment DATA16_AN, at 0x1a4
+   \   unsigned short volatile ADC12IFG
+   \                     ADC12IFG:
+   \   000000                DS8 2
+
+   \                                 In  segment DATA16_AN, at 0x1a6
+   \   unsigned short volatile ADC12IE
+   \                     ADC12IE:
+   \   000000                DS8 2
+
+   \                                 In  segment DATA16_AN, at 0x140
+   \   unsigned short volatile ADC12MEM0
+   \                     ADC12MEM0:
+   \   000000                DS8 2
+
+   \                                 In  segment DATA16_AN, at 0x142
+   \   unsigned short volatile ADC12MEM1
+   \                     ADC12MEM1:
+   \   000000                DS8 2
+
+   \                                 In  segment DATA16_AN, at 0x81
+   \   unsigned char volatile ADC12MCTL1
+   \                     ADC12MCTL1:
+   \   000000                DS8 1
+     19          #include <stdint.h>
+     20          #include <string.h>
+     21          
+     22          #include "projectdef.h"
+     23          #include "timer.h"
+     24          #include "protection.h"
+     25          #include "systemcontrol.h"
+     26          #include "configuration.h"
+     27          #include "measurement.h"
+     28          
+     29          
+     30          /*****************************************************************************
+     31          * Global Variables
+     32          *****************************************************************************/
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     33          __no_init volatile uint32_t g_ul_meansquarecurrent;
+   \                     g_ul_meansquarecurrent:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 1, align-sorted
+     34          __no_init uint8_t           g_uc_gain_index;
+   \                     g_uc_gain_index:
+   \   000000                DS8 1
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     35          __no_init volatile uint32_t g_ul_sample_time_counter;
+   \                     g_ul_sample_time_counter:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 1, align-sorted
+     36          __no_init volatile uint8_t  g_uc_asymmetric_inrush;
+   \                     g_uc_asymmetric_inrush:
+   \   000000                DS8 1
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     37          __no_init volatile uint32_t g_ul_10_sec_half_cycle_count;
+   \                     g_ul_10_sec_half_cycle_count:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 1, align-sorted
+     38          __no_init volatile uint8_t  g_uc_low_power_exit;
+   \                     g_uc_low_power_exit:
+   \   000000                DS8 1
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     39          __no_init volatile uint32_t g_ul_half_cycle_count;
+   \                     g_ul_half_cycle_count:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 1, align-sorted
+     40          __no_init volatile uint8_t  g_uc_fault_current;
+   \                     g_uc_fault_current:
+   \   000000                DS8 1
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     41          __no_init volatile uint32_t g_ul_half_cycle_count_10sec;
+   \                     g_ul_half_cycle_count_10sec:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     42          __no_init volatile uint64_t g_ull_avg_10s_ui;
+   \                     g_ull_avg_10s_ui:
+   \   000000                DS8 8
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     43          __no_init volatile uint32_t g_ul_max_10s_ui;
+   \                     g_ul_max_10s_ui:
+   \   000000                DS8 4
+     44          
+     45          /*****************************************************************************
+     46          * Static Variables
+     47          *****************************************************************************/
+
+   \                                 In  segment DATA16_C, align 2, align-sorted
+     48          const uint16_t uia_gain_factor[5]  = {6ul,24ul,92ul,299ul,1065ul};
+   \                     uia_gain_factor:
+   \   000000   060018005C00 DC16 6, 24, 92, 299, 1065
+   \            2B012904    
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     49          __no_init static st_asymmetric_calc_t asymmetric_calc_t;
+   \                     asymmetric_calc_t:
+   \   000000                DS8 8
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     50          __no_init static uint16_t ui_gain;
+   \                     ui_gain:
+   \   000000                DS8 2
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     51          __no_init static uint32_t ul_sample_square;
+   \                     ul_sample_square:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     52          __no_init static uint32_t ul_ping_sos;
+   \                     ul_ping_sos:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     53          __no_init static uint32_t ul_pong_sos;
+   \                     ul_pong_sos:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 1, align-sorted
+     54          __no_init static uint8_t  uc_sample_count;
+   \                     uc_sample_count:
+   \   000000                DS8 1
+
+   \                                 In  segment DATA16_N, align 1, align-sorted
+     55          __no_init static uint8_t uc_sos_select;
+   \                     uc_sos_select:
+   \   000000                DS8 1
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     56          __no_init static uint64_t ull_last_hour_avg;
+   \                     ull_last_hour_avg:
+   \   000000                DS8 8
+
+   \                                 In  segment DATA16_N, align 2, align-sorted
+     57          __no_init static uint32_t ul_last_hour_max;
+   \                     ul_last_hour_max:
+   \   000000                DS8 4
+
+   \                                 In  segment DATA16_N, align 1, align-sorted
+     58          __no_init static volatile uint8_t uc_first_cycle_crossed;
+   \                     uc_first_cycle_crossed:
+   \   000000                DS8 1
+     59          
+     60          /*****************************************************************************
+     61          * Static Functions
+     62          *****************************************************************************/
+     63          static inline void measurement_sample_activity (volatile int16_t const *const);
+     64          static inline void measurement_halfcycle_activity (void);
+     65          static inline void measurement_asymmetric_computation (void);
+     66          static inline void measurement_solenoid_pulse_timer (void);
+     67          /*******************************************************************************
+     68          ** Function Name : measurement_initadc ()
+     69          ** Description   : Initialize the ADC12 of controller with appropriate
+     70          **                 settings
+     71          ** Argument      : void
+     72          ** Return        : void
+     73          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+     74          void measurement_initadc (void)
+   \                     measurement_initadc:
+     75          {
+     76              /*
+     77              Initialize the ADC only when the ADC halt flag is clear
+     78              */
+     79              if (g_uc_adc_halted == FALSE)
+   \   000000   C293....     CMP.B   #0x0, &g_uc_adc_halted
+   \   000004   1520         JNE     ??measurement_initadc_0
+     80              {
+     81                  DISABLE_ADC_CONVERSION;
+   \   000006   A2C3A001     BIC.W   #0x2, &0x1a0
+     82                  SOURCE_OF_SAMPLING;
+   \   00000A   B2D00002A201 BIS.W   #0x200, &0x1a2
+     83                  DEFINE_ADC_CLOCK_AND_CONVERSION_MODE;
+   \   000010   B2D01A00A201 BIS.W   #0x1a, &0x1a2
+     84                  UPDATE_END_OF_SEQUENCE_AND_CHANNEL_INFO;
+   \   000016   F2D081008100 BIS.B   #0x81, &0x81
+     85                  DEFINE_ADC_TRIGGER_CONDITION_AND_SAMPLING_TIME;
+   \   00001C   B2D08002A001 BIS.W   #0x280, &0x1a0
+     86                  ARM_THE_ADC;
+   \   000022   B2D01000A001 BIS.W   #0x10, &0x1a0
+     87                  ENABLE_ADC_CONVERSION;
+   \   000028   A2D3A001     BIS.W   #0x2, &0x1a0
+     88          
+     89                  /*
+     90                  Reset the low power exit flag
+     91                  */
+     92                  g_uc_low_power_exit = FALSE;
+   \   00002C   C243....     MOV.B   #0x0, &g_uc_low_power_exit
+     93              }
+     94          
+     95          }
+   \                     ??measurement_initadc_0:
+   \   000030   3041         RET
+   \   000032                REQUIRE ADC12CTL0
+   \   000032                REQUIRE ADC12CTL1
+   \   000032                REQUIRE ADC12MCTL1
+     96          
+     97          /*******************************************************************************
+     98          ** Function Name : measurement_reset_hourly_data ()
+     99          ** Description   : This function reset the hourly peak and average data.
+    100          **
+    101          ** Argument      : void
+    102          ** Return        : void
+    103          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    104          void measurement_reset_hourly_data(void)
+   \                     measurement_reset_hourly_data:
+    105          {
+    106              /*
+    107              Initialize the Hourly log computation structure
+    108              */
+    109              ull_last_hour_avg = CLEAR;
+   \   000000   8243....     MOV.W   #0x0, &ull_last_hour_avg
+   \   000004   8243....     MOV.W   #0x0, &ull_last_hour_avg + 2
+   \   000008   8243....     MOV.W   #0x0, &ull_last_hour_avg + 4
+   \   00000C   8243....     MOV.W   #0x0, &ull_last_hour_avg + 6
+    110              ul_last_hour_max = CLEAR;
+   \   000010   8243....     MOV.W   #0x0, &ul_last_hour_max
+   \   000014   8243....     MOV.W   #0x0, &ul_last_hour_max + 2
+    111              g_ul_half_cycle_count = CLEAR;
+   \   000018   8243....     MOV.W   #0x0, &g_ul_half_cycle_count
+   \   00001C   8243....     MOV.W   #0x0, &g_ul_half_cycle_count + 2
+    112          
+    113              /*
+    114              Initialize the variables which updates the mean square max and avg to the
+    115              UI real time monitoring
+    116              */
+    117              g_ul_half_cycle_count_10sec = CLEAR;
+   \   000020   8243....     MOV.W   #0x0, &g_ul_half_cycle_count_10sec
+   \   000024   8243....     MOV.W   #0x0, &g_ul_half_cycle_count_10sec + 2
+    118              g_ull_avg_10s_ui = CLEAR;
+   \   000028   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui
+   \   00002C   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui + 2
+   \   000030   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui + 4
+   \   000034   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui + 6
+    119              g_ul_max_10s_ui = CLEAR;
+   \   000038   8243....     MOV.W   #0x0, &g_ul_max_10s_ui
+   \   00003C   8243....     MOV.W   #0x0, &g_ul_max_10s_ui + 2
+    120          }
+   \   000040   3041         RET
+    121          
+    122          /*******************************************************************************
+    123          ** Function Name : measurement_init ()
+    124          ** Description   : Initialize the variables and configuration used by
+    125          **                 measurement module.
+    126          ** Argument      : void
+    127          ** Return        : void
+    128          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    129          void measurement_init (void)
+   \                     measurement_init:
+    130          {
+    131              /*
+    132              Initialize the rms computation parameters
+    133              */
+    134              ul_sample_square = CLEAR;
+   \   000000   8243....     MOV.W   #0x0, &ul_sample_square
+   \   000004   8243....     MOV.W   #0x0, &ul_sample_square + 2
+    135              uc_sample_count = CLEAR;
+   \   000008   C243....     MOV.B   #0x0, &uc_sample_count
+    136              uc_sos_select = CLEAR;
+   \   00000C   C243....     MOV.B   #0x0, &uc_sos_select
+    137              ul_ping_sos = CLEAR;
+   \   000010   8243....     MOV.W   #0x0, &ul_ping_sos
+   \   000014   8243....     MOV.W   #0x0, &ul_ping_sos + 2
+    138              ul_pong_sos = CLEAR;
+   \   000018   8243....     MOV.W   #0x0, &ul_pong_sos
+   \   00001C   8243....     MOV.W   #0x0, &ul_pong_sos + 2
+    139          
+    140              /*
+    141              Update the gain factor as per the configured minimum trip
+    142              */
+    143              ui_gain = uia_gain_factor[g_uc_gain_index];
+   \   000020   5F42....     MOV.B   &g_uc_gain_index, R15
+   \   000024   4F4F         MOV.B   R15, R15
+   \   000026   0F5F         RLA.W   R15
+   \   000028   924F........ MOV.W   uia_gain_factor(R15), &ui_gain
+    144          
+    145              /*
+    146              Update the ping-pong variable selection flag
+    147              */
+    148              uc_sos_select = PING;
+   \   00002E   C243....     MOV.B   #0x0, &uc_sos_select
+    149          
+    150              /*
+    151              Initialize the Asymmetric computation parameters
+    152              */
+    153              memset(&asymmetric_calc_t,CLEAR,sizeof(asymmetric_calc_t));
+   \   000032   3E42         MOV.W   #0x8, R14
+   \   000034   0D43         MOV.W   #0x0, R13
+   \   000036   3C40....     MOV.W   #asymmetric_calc_t, R12
+   \   00003A   B012....     CALL    #memset
+    154          
+    155              /*
+    156              Initialize the Asymmetric inrush flag
+    157              */
+    158              g_uc_asymmetric_inrush = FALSE;
+   \   00003E   C243....     MOV.B   #0x0, &g_uc_asymmetric_inrush
+    159          
+    160              /*
+    161              Initialize the mean square to zero
+    162              */
+    163              g_ul_meansquarecurrent = CLEAR;
+   \   000042   8243....     MOV.W   #0x0, &g_ul_meansquarecurrent
+   \   000046   8243....     MOV.W   #0x0, &g_ul_meansquarecurrent + 2
+    164          
+    165              /*
+    166              Initialize the sample time counter
+    167              */
+    168              g_ul_sample_time_counter = CLEAR;
+   \   00004A   8243....     MOV.W   #0x0, &g_ul_sample_time_counter
+   \   00004E   8243....     MOV.W   #0x0, &g_ul_sample_time_counter + 2
+    169          
+    170              /*
+    171              Initialize the execute protection task flag
+    172              */
+    173              g_uc_execute_protection_task = FALSE;
+   \   000052   C243....     MOV.B   #0x0, &g_uc_execute_protection_task
+    174          
+    175              /*
+    176              Initialize the first cycle cross over flag
+    177              */
+    178              uc_first_cycle_crossed = FALSE;
+   \   000056   C243....     MOV.B   #0x0, &uc_first_cycle_crossed
+    179          
+    180              /*
+    181              Initialize the fault current flag
+    182              */
+    183              g_uc_fault_current = FALSE;
+   \   00005A   C243....     MOV.B   #0x0, &g_uc_fault_current
+    184          }
+   \   00005E   3041         RET
+    185          
+    186          /*******************************************************************************
+    187          ** Function Name : measurement_readadc ()
+    188          ** Description   : Read the ADC conversion result and updates a global variable
+    189          **                 for further computation.
+    190          ** Argument      : void
+    191          ** Return        : void
+    192          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    193          void measurement_readadc (void)
+   \                     measurement_readadc:
+    194          {
+   \   000000   2183         SUB.W   #0x2, SP
+    195              volatile int16_t si_input_sample = CLEAR;
+   \   000002   81430000     MOV.W   #0x0, 0(SP)
+    196              /*
+    197              Read the samples from the ADC
+    198              The positive half cycle is converted by the ADC0 channel and the negative
+    199              half cycle is converted by the ADC1 channel.
+    200              */
+    201              si_input_sample = ADC12MEM0;
+   \   000006   914240010000 MOV.W   &0x140, 0(SP)
+    202              si_input_sample -= ADC12MEM1;
+   \   00000C   918242010000 SUB.W   &0x142, 0(SP)
+    203          
+    204              /*
+    205              Clear the pending interrupts
+    206              */
+    207              CLEAR_ADC_PENDING_INTERRUPTS;
+   \   000012   B2F0FCFFA401 AND.W   #0xfffc, &0x1a4
+    208          
+    209              /*
+    210              Call the sample activity to execute the Mean square computation
+    211              */
+    212              measurement_sample_activity(&si_input_sample);
+   \   000018   0C41         MOV.W   SP, R12
+   \   00001A   B012....     CALL    #measurement_sample_activity
+    213          
+    214              /*
+    215              Increment the minimum response timer
+    216              */
+    217              g_uc_min_res_timer_counter++;
+   \   00001E   D253....     ADD.B   #0x1, &g_uc_min_res_timer_counter
+    218          
+    219              /*
+    220              Check whether the minimum response timer is expired
+    221              */
+    222              if (g_uc_min_res_timer_counter >= config_parameter_t.uc_min_resp_time)
+   \   000022   D292........ CMP.B   &config_parameter_t + 6, &g_uc_min_res_timer_counter
+   \   000028   0228         JNC     ??measurement_readadc_0
+    223              {
+    224                  /*
+    225                  Set the minimum response expiry flag
+    226                  */
+    227                  g_uc_min_res_time_expiry = TRUE;
+   \   00002A   D243....     MOV.B   #0x1, &g_uc_min_res_time_expiry
+    228              }
+    229              /*
+    230              Execute the solenoid pulse software timer
+    231              */
+    232              measurement_solenoid_pulse_timer();
+   \                     ??measurement_readadc_0:
+   \   00002E   B012....     CALL    #measurement_solenoid_pulse_timer
+    233          }
+   \   000032   2153         ADD.W   #0x2, SP
+   \   000034   3041         RET
+   \   000036                REQUIRE ADC12MEM0
+   \   000036                REQUIRE ADC12MEM1
+   \   000036                REQUIRE ADC12IFG
+    234          
+    235          /******************************************************************************
+    236          ** Function Name : measurement_sample_activity ()
+    237          ** Description   : This function is executed after retriving the sample from the
+    238          **                 ADC registers. This function compute the half cycle sum of
+    239          **                 square and update the respective PING/PONG variable as per
+    240          **                 the SOS select flag. This function also update the asymmetric
+    241          **                 computation variables. Upon completion of the half cycle
+    242          **                 duration the mean square and asymmetric computation task are
+    243          **                 invovked.
+    244          **
+    245          ** Argument      : instantaneous ADC sample
+    246          ** Return        : void
+    247          ******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    248          static void measurement_sample_activity (volatile int16_t const *const si_sample)
+   \                     measurement_sample_activity:
+    249          {
+   \   000000   0A12         PUSH.W  R10
+   \   000002   0A4C         MOV.W   R12, R10
+    250              /*
+    251              Increment the sample count
+    252              */
+    253              uc_sample_count++;
+   \   000004   D253....     ADD.B   #0x1, &uc_sample_count
+    254          
+    255              /*
+    256              sum the samples to compute the asymmetric inrush
+    257              */
+    258              asymmetric_calc_t.sl_halfcycle_sum_present += (*si_sample);
+   \   000008   2E4A         MOV.W   @R10, R14
+   \   00000A   0F4E         MOV.W   R14, R15
+   \   00000C   3FE3         XOR.W   #0xffff, R15
+   \   00000E   0F5F         RLA.W   R15
+   \   000010   0F7F         SUBC.W  R15, R15
+   \   000012   825E....     ADD.W   R14, &asymmetric_calc_t
+   \   000016   826F....     ADDC.W  R15, &asymmetric_calc_t + 2
+    259          
+    260              /*
+    261              Find the square of the sample
+    262              */
+    263              ul_sample_square = \
+    264              (uint32_t) ((int32_t)(*si_sample) * (int32_t)(*si_sample));
+   \   00001A   2C4A         MOV.W   @R10, R12
+   \   00001C   2E4A         MOV.W   @R10, R14
+   \   00001E   B012....     CALL    #?Mul16to32s
+   \   000022   824C....     MOV.W   R12, &ul_sample_square
+   \   000026   824D....     MOV.W   R13, &ul_sample_square + 2
+    265          
+    266              /*
+    267              Find the sum of square
+    268              Sliding window method is employed here to compute the Mean square at the
+    269              half cycle rate.
+    270          
+    271              For the very first time, the mean square will be computed after crossing
+    272              one cycle, then onwards the mean square will be computed at the half
+    273              cycle rate.
+    274          
+    275              To implement the sliding window, we use two SOS variable, namely PING and
+    276              PONG. The PING and PONG variable holds the half cycle SOS it may be present(n)
+    277              or previous(n-1). At any half cyle cross over, the PING may hold present
+    278              cycle SOS and PONG may hold previous cycle SOS and vice versa. The PING and
+    279              PONG variable selections are based on the SOS select variable.
+    280          
+    281          
+    282              Then the mean square will be computed by summing both PING and PONG
+    283              variable and then average will be taken. Then the content of PING variable
+    284              is cleared and the next half cycle SOS will stored in PING variable.
+    285              */
+    286              if (PING == uc_sos_select)
+   \   00002A   C293....     CMP.B   #0x0, &uc_sos_select
+   \   00002E   0720         JNE     ??measurement_sample_activity_0
+    287              {
+    288                  /*
+    289                  Find the sum of square
+    290                  */
+    291                  ul_ping_sos += ul_sample_square;
+   \   000030   9252........ ADD.W   &ul_sample_square, &ul_ping_sos
+   \   000036   9262........ ADDC.W  &ul_sample_square + 2, &ul_ping_sos + 2
+   \   00003C   063C         JMP     ??measurement_sample_activity_1
+    292              }
+    293              else
+    294              {
+    295                  /*
+    296                  Find the sum of square
+    297                  */
+    298                  ul_pong_sos += ul_sample_square;
+   \                     ??measurement_sample_activity_0:
+   \   00003E   9252........ ADD.W   &ul_sample_square, &ul_pong_sos
+   \   000044   9262........ ADDC.W  &ul_sample_square + 2, &ul_pong_sos + 2
+    299              }
+    300              /*
+    301              Check for the half cycle complete
+    302              */
+    303              if (SAMPLE_PER_HALF_CYCLE == uc_sample_count)
+   \                     ??measurement_sample_activity_1:
+   \   00004A   F292....     CMP.B   #0x8, &uc_sample_count
+   \   00004E   2E20         JNE     ??measurement_sample_activity_2
+    304              {
+    305                  /*
+    306                  Increment the half cycle count
+    307                  */
+    308                  g_ul_half_cycle_count++;
+   \   000050   9253....     ADD.W   #0x1, &g_ul_half_cycle_count
+   \   000054   8263....     ADDC.W  #0x0, &g_ul_half_cycle_count + 2
+    309          
+    310                  /*
+    311                  Clear the sample count after completing a half cycle
+    312                  */
+    313                  uc_sample_count = CLEAR;
+   \   000058   C243....     MOV.B   #0x0, &uc_sample_count
+    314          
+    315                  /*
+    316                  Invoke the half cycle activity to compute the mean square
+    317                  */
+    318                  measurement_halfcycle_activity();
+   \   00005C   B012....     CALL    #measurement_halfcycle_activity
+    319          
+    320                  /*
+    321                  Invoke the asymmetric computation
+    322                  */
+    323                  measurement_asymmetric_computation();
+   \   000060   B012....     CALL    #measurement_asymmetric_computation
+    324          
+    325                  /*
+    326                  if the line current is less than 10Amps and the protection state is
+    327                  NORMAL,then don't execute the protection algorithm.
+    328                  Read the status of protection station machine
+    329                  */
+    330                  if ((NORMAL_STATE == g_protection_state_t)&&(g_ul_meansquarecurrent < 100))
+   \   000064   C293....     CMP.B   #0x0, &g_protection_state_t
+   \   000068   0B20         JNE     ??measurement_sample_activity_3
+   \   00006A   8293....     CMP.W   #0x0, &g_ul_meansquarecurrent + 2
+   \   00006E   0528         JNC     ??measurement_sample_activity_4
+   \   000070   0720         JNE     ??measurement_sample_activity_3
+   \   000072   B2906400.... CMP.W   #0x64, &g_ul_meansquarecurrent
+   \   000078   032C         JC      ??measurement_sample_activity_3
+    331                  {
+    332                      /*
+    333                      Set the low power exit flag
+    334                      */
+    335                      g_uc_low_power_exit = FALSE;
+   \                     ??measurement_sample_activity_4:
+   \   00007A   C243....     MOV.B   #0x0, &g_uc_low_power_exit
+   \   00007E   023C         JMP     ??measurement_sample_activity_5
+    336                  }
+    337                  else
+    338                  {
+    339                      /*
+    340                      Set the low power exit flag
+    341                      */
+    342                      g_uc_low_power_exit = TRUE;
+   \                     ??measurement_sample_activity_3:
+   \   000080   D243....     MOV.B   #0x1, &g_uc_low_power_exit
+    343                  }
+    344                  /*
+    345                  Debounce logic to turn ON the radio - when line current is greater 
+    346                  than 10A consistently for 1200 half cycles
+    347                  */
+    348                  if (MINIMUM_CURRENT_THRESHOLD < g_ul_meansquarecurrent)
+   \                     ??measurement_sample_activity_5:
+   \   000084   8293....     CMP.W   #0x0, &g_ul_meansquarecurrent + 2
+   \   000088   0B28         JNC     ??measurement_sample_activity_6
+   \   00008A   0420         JNE     ??measurement_sample_activity_7
+   \   00008C   B2906500.... CMP.W   #0x65, &g_ul_meansquarecurrent
+   \   000092   0628         JNC     ??measurement_sample_activity_6
+    349                  {
+    350                      if (ZERO != g_ui_radio_hysteresis_time)
+   \                     ??measurement_sample_activity_7:
+   \   000094   8293....     CMP.W   #0x0, &g_ui_radio_hysteresis_time
+   \   000098   0624         JEQ     ??measurement_sample_activity_8
+    351                      {
+    352                          g_ui_radio_hysteresis_time--;
+   \   00009A   B253....     ADD.W   #0xffff, &g_ui_radio_hysteresis_time
+   \   00009E   033C         JMP     ??measurement_sample_activity_8
+    353                      }
+    354                  }
+    355                  else
+    356                  {
+    357                      g_ui_radio_hysteresis_time = NO_OF_HALF_CYCLE_COMP_IN_10_SEC;
+   \                     ??measurement_sample_activity_6:
+   \   0000A0   B240B004.... MOV.W   #0x4b0, &g_ui_radio_hysteresis_time
+    358                  }
+    359                  /*
+    360                  Set the execute protection task flag
+    361                  */
+    362                  g_uc_execute_protection_task = TRUE;
+   \                     ??measurement_sample_activity_8:
+   \   0000A6   D243....     MOV.B   #0x1, &g_uc_execute_protection_task
+   \   0000AA   1F3C         JMP     ??measurement_sample_activity_9
+    363              }
+    364              else
+    365              {
+    366                  /*
+    367                  Check for the fault condition
+    368                  */
+    369                  if ((INVERSE_TIME_OVER_CURRENT == g_protection_state_t) || \
+    370                      (HLT_NR == g_protection_state_t) || (COLD_LOAD == g_protection_state_t))
+   \                     ??measurement_sample_activity_2:
+   \   0000AC   D293....     CMP.B   #0x1, &g_protection_state_t
+   \   0000B0   0724         JEQ     ??measurement_sample_activity_10
+   \   0000B2   F2900300.... CMP.B   #0x3, &g_protection_state_t
+   \   0000B8   0324         JEQ     ??measurement_sample_activity_10
+   \   0000BA   E293....     CMP.B   #0x2, &g_protection_state_t
+   \   0000BE   1520         JNE     ??measurement_sample_activity_9
+    371                  {
+    372                      /*
+    373                      If the energy accumulation is initiated already, then compute the
+    374                      energy accumulation at the sample rate
+    375                      */
+    376                      if (ZERO < g_ul_fault_energy)
+   \                     ??measurement_sample_activity_10:
+   \   0000C0   1F42....     MOV.W   &g_ul_fault_energy, R15
+   \   0000C4   1FD2....     BIS.W   &g_ul_fault_energy + 2, R15
+   \   0000C8   0F93         CMP.W   #0x0, R15
+   \   0000CA   0F24         JEQ     ??measurement_sample_activity_9
+    377                      {
+    378                          protection_tcc_accumulation();
+   \   0000CC   B012....     CALL    #protection_tcc_accumulation
+    379                          /*
+    380                          Check whether the energy accumulation reached maximum
+    381                          */
+    382                          if (MAX_COUNT_2_TRIP <= g_ul_fault_energy)
+   \   0000D0   B2902401.... CMP.W   #0x124, &g_ul_fault_energy + 2
+   \   0000D6   0928         JNC     ??measurement_sample_activity_9
+   \   0000D8   0420         JNE     ??measurement_sample_activity_11
+   \   0000DA   B29000F8.... CMP.W   #0xf800, &g_ul_fault_energy
+   \   0000E0   0428         JNC     ??measurement_sample_activity_9
+    383                          {
+    384                              /*
+    385                              Fault accumlation have reached the maximum, we have to
+    386                              initiate the solenoid open, so set the execute protectin task
+    387                              flag to wakeup the protection task
+    388                              */
+    389                              g_uc_execute_protection_task = TRUE;
+   \                     ??measurement_sample_activity_11:
+   \   0000E2   D243....     MOV.B   #0x1, &g_uc_execute_protection_task
+    390          
+    391                              /*
+    392                              Set the low power exit flag
+    393                              */
+    394                              g_uc_low_power_exit = TRUE;
+   \   0000E6   D243....     MOV.B   #0x1, &g_uc_low_power_exit
+    395                          }
+    396                      }
+    397                  }
+    398              }
+    399              /*
+    400              Increment the sample time counter - This counter is used to record the
+    401              control response time for a fault
+    402              */
+    403              g_ul_sample_time_counter++;
+   \                     ??measurement_sample_activity_9:
+   \   0000EA   9253....     ADD.W   #0x1, &g_ul_sample_time_counter
+   \   0000EE   8263....     ADDC.W  #0x0, &g_ul_sample_time_counter + 2
+    404          }
+   \   0000F2   3A41         POP.W   R10
+   \   0000F4   3041         RET
+    405          
+    406          /******************************************************************************
+    407          ** Function Name : measurement_halfcycle_activity ()
+    408          ** Description   : This function is executed at the half cycle rate. This
+    409          **                 function computes the half cycle mean square by adding the
+    410          **                 PING and PONG SOS variable and divide the final sum by 16.
+    411          **                 This mean sqaure is used by the protection module to execute
+    412          **                 the fault detection algorithm.
+    413          **
+    414          ** Argument      : void
+    415          ** Return        : void
+    416          ******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    417          static void measurement_halfcycle_activity (void)
+   \                     measurement_halfcycle_activity:
+    418          {
+   \   000000   0A12         PUSH.W  R10
+   \   000002   0B12         PUSH.W  R11
+   \   000004   0812         PUSH.W  R8
+   \   000006   0912         PUSH.W  R9
+    419              uint64_t ull_ms_current;
+    420          
+    421              /*
+    422              Check whether one complete cycle is crossed
+    423              */
+    424              if (TRUE == uc_first_cycle_crossed)
+   \   000008   D293....     CMP.B   #0x1, &uc_first_cycle_crossed
+   \   00000C   AE20         JNE     ??measurement_halfcycle_activity_0
+    425              {
+    426                  /*
+    427                  Sum the present and previous half cycle sum of square to compute the
+    428                  full cycle sum of square
+    429                  */
+    430                  ull_ms_current = ul_ping_sos + ul_pong_sos;
+   \   00000E   1C42....     MOV.W   &ul_ping_sos, R12
+   \   000012   1D42....     MOV.W   &ul_ping_sos + 2, R13
+   \   000016   1C52....     ADD.W   &ul_pong_sos, R12
+   \   00001A   1D62....     ADDC.W  &ul_pong_sos + 2, R13
+   \   00001E   0E43         MOV.W   #0x0, R14
+   \   000020   0F43         MOV.W   #0x0, R15
+   \   000022   084C         MOV.W   R12, R8
+   \   000024   094D         MOV.W   R13, R9
+   \   000026   0A4E         MOV.W   R14, R10
+   \   000028   0B4F         MOV.W   R15, R11
+    431          
+    432                  /*
+    433                  Divide the sum of square by 16 to find the mean square
+    434                  */
+    435                  ull_ms_current = (ull_ms_current >> 4);
+   \   00002A   12C3         CLRC
+   \   00002C   0B10         RRC.W   R11
+   \   00002E   0A10         RRC.W   R10
+   \   000030   0910         RRC.W   R9
+   \   000032   0810         RRC.W   R8
+   \   000034   0B11         RRA.W   R11
+   \   000036   0A10         RRC.W   R10
+   \   000038   0910         RRC.W   R9
+   \   00003A   0810         RRC.W   R8
+   \   00003C   0B11         RRA.W   R11
+   \   00003E   0A10         RRC.W   R10
+   \   000040   0910         RRC.W   R9
+   \   000042   0810         RRC.W   R8
+   \   000044   0B11         RRA.W   R11
+   \   000046   0A10         RRC.W   R10
+   \   000048   0910         RRC.W   R9
+   \   00004A   0810         RRC.W   R8
+    436          
+    437                  ull_ms_current = ull_ms_current * ui_gain;
+   \   00004C   0C48         MOV.W   R8, R12
+   \   00004E   0D49         MOV.W   R9, R13
+   \   000050   0E4A         MOV.W   R10, R14
+   \   000052   0F4B         MOV.W   R11, R15
+   \   000054   1842....     MOV.W   &ui_gain, R8
+   \   000058   0943         MOV.W   #0x0, R9
+   \   00005A   0A43         MOV.W   #0x0, R10
+   \   00005C   0B43         MOV.W   #0x0, R11
+   \   00005E   B012....     CALL    #_Mul64i
+   \   000062   084C         MOV.W   R12, R8
+   \   000064   094D         MOV.W   R13, R9
+   \   000066   0A4E         MOV.W   R14, R10
+   \   000068   0B4F         MOV.W   R15, R11
+    438          
+    439                  /*
+    440                  The mean square computed by measurement is expressed as (I*I*1024)/10
+    441                  The real mean square will be obtained by the expression
+    442                  I*I = (mean square computed by measurement * 10)/1024
+    443                  */
+    444                  ull_ms_current = ((ull_ms_current * 10) >> 10);
+   \   00006A   0C48         MOV.W   R8, R12
+   \   00006C   0D49         MOV.W   R9, R13
+   \   00006E   0E4A         MOV.W   R10, R14
+   \   000070   0F4B         MOV.W   R11, R15
+   \   000072   38400A00     MOV.W   #0xa, R8
+   \   000076   0943         MOV.W   #0x0, R9
+   \   000078   0A43         MOV.W   #0x0, R10
+   \   00007A   0B43         MOV.W   #0x0, R11
+   \   00007C   B012....     CALL    #_Mul64i
+   \   000080   084C         MOV.W   R12, R8
+   \   000082   094D         MOV.W   R13, R9
+   \   000084   0A4E         MOV.W   R14, R10
+   \   000086   0B4F         MOV.W   R15, R11
+   \   000088   8B10         SWPB    R11
+   \   00008A   8A10         SWPB    R10
+   \   00008C   8910         SWPB    R9
+   \   00008E   8810         SWPB    R8
+   \   000090   48E9         XOR.B   R9, R8
+   \   000092   08E9         XOR.W   R9, R8
+   \   000094   49EA         XOR.B   R10, R9
+   \   000096   09EA         XOR.W   R10, R9
+   \   000098   4AEB         XOR.B   R11, R10
+   \   00009A   0AEB         XOR.W   R11, R10
+   \   00009C   3BF0FF00     AND.W   #0xff, R11
+   \   0000A0   12C3         CLRC
+   \   0000A2   0B10         RRC.W   R11
+   \   0000A4   0A10         RRC.W   R10
+   \   0000A6   0910         RRC.W   R9
+   \   0000A8   0810         RRC.W   R8
+   \   0000AA   0B11         RRA.W   R11
+   \   0000AC   0A10         RRC.W   R10
+   \   0000AE   0910         RRC.W   R9
+   \   0000B0   0810         RRC.W   R8
+    445          
+    446                  /*
+    447                  The size of the mean square will never grow above 32-bit.
+    448                  A 32-bit mean square variable can hold upto 65535 RMS value
+    449                  */
+    450                  g_ul_meansquarecurrent = ull_ms_current & 0xFFFFFFFF;
+   \   0000B2   8248....     MOV.W   R8, &g_ul_meansquarecurrent
+   \   0000B6   8249....     MOV.W   R9, &g_ul_meansquarecurrent + 2
+    451          
+    452                  /*
+    453                  Ignore the mean square computed, when the protection state machine is
+    454                  higher than open cap check. During those state, the solenoid is opened,
+    455                  so the computed values may have junk values
+    456                  */
+    457                  if (OPEN_CAP_CHECK >= g_protection_state_t)
+   \   0000BA   F2900500.... CMP.B   #0x5, &g_protection_state_t
+   \   0000C0   1D2C         JC      ??measurement_halfcycle_activity_1
+    458                  {
+    459                      /*
+    460                      Accumulate the mean square to compute the hourly mean square average
+    461                      */
+    462                      ull_last_hour_avg += g_ul_meansquarecurrent;
+   \   0000C2   1C42....     MOV.W   &g_ul_meansquarecurrent, R12
+   \   0000C6   1D42....     MOV.W   &g_ul_meansquarecurrent + 2, R13
+   \   0000CA   0E43         MOV.W   #0x0, R14
+   \   0000CC   0F43         MOV.W   #0x0, R15
+   \   0000CE   825C....     ADD.W   R12, &ull_last_hour_avg
+   \   0000D2   826D....     ADDC.W  R13, &ull_last_hour_avg + 2
+   \   0000D6   826E....     ADDC.W  R14, &ull_last_hour_avg + 4
+   \   0000DA   826F....     ADDC.W  R15, &ull_last_hour_avg + 6
+    463                      /*
+    464                      Compute the mean square maximum
+    465                      */
+    466                      if (g_ul_meansquarecurrent > ul_last_hour_max)
+   \   0000DE   9292........ CMP.W   &g_ul_meansquarecurrent + 2, &ul_last_hour_max + 2
+   \   0000E4   0528         JNC     ??measurement_halfcycle_activity_2
+   \   0000E6   0A20         JNE     ??measurement_halfcycle_activity_1
+   \   0000E8   9292........ CMP.W   &g_ul_meansquarecurrent, &ul_last_hour_max
+   \   0000EE   062C         JC      ??measurement_halfcycle_activity_1
+    467                      {
+    468                          ul_last_hour_max = g_ul_meansquarecurrent;
+   \                     ??measurement_halfcycle_activity_2:
+   \   0000F0   9242........ MOV.W   &g_ul_meansquarecurrent, &ul_last_hour_max
+   \   0000F6   9242........ MOV.W   &g_ul_meansquarecurrent + 2, &ul_last_hour_max + 2
+    469                      }
+    470                  }
+    471          
+    472                  /*
+    473                  Check for the first hour cross over flag
+    474                  */
+    475                  if (FALSE == g_uc_first_hour_crossover)
+   \                     ??measurement_halfcycle_activity_1:
+   \   0000FC   C293....     CMP.B   #0x0, &g_uc_first_hour_crossover
+   \   000100   2520         JNE     ??measurement_halfcycle_activity_3
+    476                  {
+    477                      /*
+    478                      Ignore the mean square computed, when the protection state machine
+    479                      higher then open cap check. During those state, the solenoid is
+    480                      opened,so the computed values may have junk values
+    481                      */
+    482                      if (OPEN_CAP_CHECK >= g_protection_state_t)
+   \   000102   F2900500.... CMP.B   #0x5, &g_protection_state_t
+   \   000108   212C         JC      ??measurement_halfcycle_activity_3
+    483                      {
+    484                          /*
+    485                          Succedding the startup, the mean square maximum and average for
+    486                          UI real time montioring is computed for every ten seconds. 10
+    487                          seconds computation persists till the first one hour boundary is
+    488                          crossed
+    489                          */
+    490                          g_ull_avg_10s_ui += g_ul_meansquarecurrent;
+   \   00010A   1C42....     MOV.W   &g_ul_meansquarecurrent, R12
+   \   00010E   1D42....     MOV.W   &g_ul_meansquarecurrent + 2, R13
+   \   000112   0E43         MOV.W   #0x0, R14
+   \   000114   0F43         MOV.W   #0x0, R15
+   \   000116   825C....     ADD.W   R12, &g_ull_avg_10s_ui
+   \   00011A   826D....     ADDC.W  R13, &g_ull_avg_10s_ui + 2
+   \   00011E   826E....     ADDC.W  R14, &g_ull_avg_10s_ui + 4
+   \   000122   826F....     ADDC.W  R15, &g_ull_avg_10s_ui + 6
+    491          
+    492                          if (g_ul_meansquarecurrent > g_ul_max_10s_ui)
+   \   000126   9292........ CMP.W   &g_ul_meansquarecurrent + 2, &g_ul_max_10s_ui + 2
+   \   00012C   0528         JNC     ??measurement_halfcycle_activity_4
+   \   00012E   0A20         JNE     ??measurement_halfcycle_activity_5
+   \   000130   9292........ CMP.W   &g_ul_meansquarecurrent, &g_ul_max_10s_ui
+   \   000136   062C         JC      ??measurement_halfcycle_activity_5
+    493                          {
+    494                              g_ul_max_10s_ui = g_ul_meansquarecurrent;
+   \                     ??measurement_halfcycle_activity_4:
+   \   000138   9242........ MOV.W   &g_ul_meansquarecurrent, &g_ul_max_10s_ui
+   \   00013E   9242........ MOV.W   &g_ul_meansquarecurrent + 2, &g_ul_max_10s_ui + 2
+    495                          }
+    496                          /*
+    497                          Increment the ten second half cycle count if the first hour is
+    498                          didn't crossed
+    499                          */
+    500                          g_ul_half_cycle_count_10sec++;
+   \                     ??measurement_halfcycle_activity_5:
+   \   000144   9253....     ADD.W   #0x1, &g_ul_half_cycle_count_10sec
+   \   000148   8263....     ADDC.W  #0x0, &g_ul_half_cycle_count_10sec + 2
+    501                      }
+    502                  }
+    503          
+    504                  /*
+    505                  Check for the one hour window cross over
+    506                  */
+    507                  if (NO_OF_HALF_CYCLE_COMP_IN_A_HOUR == g_ul_half_cycle_count)
+   \                     ??measurement_halfcycle_activity_3:
+   \   00014C   B2908097.... CMP.W   #0x9780, &g_ul_half_cycle_count
+   \   000152   0620         JNE     ??measurement_halfcycle_activity_6
+   \   000154   B2900600.... CMP.W   #0x6, &g_ul_half_cycle_count + 2
+   \   00015A   0220         JNE     ??measurement_halfcycle_activity_6
+    508                  {
+    509                      /*
+    510                      Invoke the hourly log activity to compute the houly max and avg
+    511                      */
+    512                      measurement_cmpt_hrly_log_rms();
+   \   00015C   B012....     CALL    #measurement_cmpt_hrly_log_rms
+    513                  }
+    514                  /*
+    515                  Check for the first hour cross over flag
+    516                  */
+    517                  if (FALSE == g_uc_first_hour_crossover)
+   \                     ??measurement_halfcycle_activity_6:
+   \   000160   C293....     CMP.B   #0x0, &g_uc_first_hour_crossover
+   \   000164   0220         JNE     ??measurement_halfcycle_activity_0
+    518                  {
+    519                      measurement_10sec_computation();
+   \   000166   B012....     CALL    #measurement_10sec_computation
+    520                  }
+    521              }
+    522          
+    523              /*
+    524              Check for the present half cycle SOS.
+    525              */
+    526              if (PING == uc_sos_select)
+   \                     ??measurement_halfcycle_activity_0:
+   \   00016A   C293....     CMP.B   #0x0, &uc_sos_select
+   \   00016E   0920         JNE     ??measurement_halfcycle_activity_7
+    527              {
+    528                  /*
+    529                  If the present half cycle SOS is stored in PING variable, then clear the
+    530                  PONG variable and assign SOS select as PONG, so that the succeeding half
+    531                  cycle will be stored in the PONG variable
+    532                  */
+    533          
+    534                  ul_pong_sos = CLEAR;
+   \   000170   8243....     MOV.W   #0x0, &ul_pong_sos
+   \   000174   8243....     MOV.W   #0x0, &ul_pong_sos + 2
+    535                  uc_sos_select = PONG;
+   \   000178   D243....     MOV.B   #0x1, &uc_sos_select
+    536          
+    537                  /*
+    538                  Set the first cycle cross over flag
+    539                  */
+    540                  uc_first_cycle_crossed = TRUE;
+   \   00017C   D243....     MOV.B   #0x1, &uc_first_cycle_crossed
+   \   000180   063C         JMP     ??measurement_halfcycle_activity_8
+    541              }
+    542              else
+    543              {
+    544                  /*
+    545                  If the present half cycle SOS is stored in PONG variable, then clear the
+    546                  PING variable and assign SOS select as PING, so that the succeeding half
+    547                  cycle will be stored in the PING variable
+    548                  */
+    549                  ul_ping_sos = CLEAR;
+   \                     ??measurement_halfcycle_activity_7:
+   \   000182   8243....     MOV.W   #0x0, &ul_ping_sos
+   \   000186   8243....     MOV.W   #0x0, &ul_ping_sos + 2
+    550                  uc_sos_select = PING;
+   \   00018A   C243....     MOV.B   #0x0, &uc_sos_select
+    551              }
+    552              if (g_ul_meansquarecurrent > \
+    553                  config_parameter_t.ul_min_trip_threshold_squared)
+   \                     ??measurement_halfcycle_activity_8:
+   \   00018E   5E42....     MOV.B   &config_parameter_t + 2, R14
+   \   000192   4E4E         MOV.B   R14, R14
+   \   000194   5F42....     MOV.B   &config_parameter_t + 3, R15
+   \   000198   4F4F         MOV.B   R15, R15
+   \   00019A   3FF0FF00     AND.W   #0xff, R15
+   \   00019E   8F10         SWPB    R15
+   \   0001A0   0EDF         BIS.W   R15, R14
+   \   0001A2   5F42....     MOV.B   &config_parameter_t + 4, R15
+   \   0001A6   4F4F         MOV.B   R15, R15
+   \   0001A8   5D42....     MOV.B   &config_parameter_t + 5, R13
+   \   0001AC   4D4D         MOV.B   R13, R13
+   \   0001AE   3DF0FF00     AND.W   #0xff, R13
+   \   0001B2   8D10         SWPB    R13
+   \   0001B4   0FDD         BIS.W   R13, R15
+   \   0001B6   1F92....     CMP.W   &g_ul_meansquarecurrent + 2, R15
+   \   0001BA   0428         JNC     ??measurement_halfcycle_activity_9
+   \   0001BC   0620         JNE     ??measurement_halfcycle_activity_10
+   \   0001BE   1E92....     CMP.W   &g_ul_meansquarecurrent, R14
+   \   0001C2   032C         JC      ??measurement_halfcycle_activity_10
+    554              {
+    555                  g_uc_fault_current = TRUE;
+   \                     ??measurement_halfcycle_activity_9:
+   \   0001C4   D243....     MOV.B   #0x1, &g_uc_fault_current
+   \   0001C8   023C         JMP     ??measurement_halfcycle_activity_11
+    556              }
+    557              else
+    558              {
+    559                  g_uc_fault_current = FALSE;
+   \                     ??measurement_halfcycle_activity_10:
+   \   0001CA   C243....     MOV.B   #0x0, &g_uc_fault_current
+    560              }
+    561          }
+   \                     ??measurement_halfcycle_activity_11:
+   \   0001CE   3040....     BR      #?Epilogue4
+    562          
+    563          /******************************************************************************
+    564          ** Function Name : measurement_asymmetric_computation ()
+    565          ** Description   : This function is executed at the half cycle rate. Upon the
+    566          **                 completion of the full cycle duration the asymmertic inrush
+    567          **                 is computed. If the DC average is greater than 50% of
+    568          **                 computed mean square, then the inrush flag is set.
+    569          **
+    570          ** Argument      : void
+    571          ** Return        : void
+    572          ******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    573          static inline void measurement_asymmetric_computation (void)
+   \                     measurement_asymmetric_computation:
+    574          {
+   \   000000   0A12         PUSH.W  R10
+   \   000002   0B12         PUSH.W  R11
+   \   000004   0812         PUSH.W  R8
+   \   000006   0912         PUSH.W  R9
+   \   000008   0612         PUSH.W  R6
+   \   00000A   0712         PUSH.W  R7
+    575              uint32_t ul_meansquare_threshold;
+    576              int32_t sl_full_cycle_count;
+    577              uint32_t ul_dc_square;
+    578          
+    579              /*
+    580              Assign the mean square value to a local variable
+    581              */
+    582              ul_meansquare_threshold = g_ul_meansquarecurrent;
+   \   00000C   1A42....     MOV.W   &g_ul_meansquarecurrent, R10
+   \   000010   1B42....     MOV.W   &g_ul_meansquarecurrent + 2, R11
+    583          
+    584              /*
+    585              Make the threshold a 50% of mean square
+    586              */
+    587              ul_meansquare_threshold >>=1;
+   \   000014   12C3         CLRC
+   \   000016   0B10         RRC.W   R11
+   \   000018   0A10         RRC.W   R10
+    588          
+    589              /*
+    590              Check whether one complete cycle is crossed
+    591              */
+    592              if (TRUE == uc_first_cycle_crossed)
+   \   00001A   D293....     CMP.B   #0x1, &uc_first_cycle_crossed
+   \   00001E   2A20         JNE     ??measurement_asymmetric_computation_0
+    593              {
+    594                  /*
+    595                  Find the full cycle count by summing the present and previous half cycle
+    596                  count
+    597                  */
+    598                  sl_full_cycle_count = asymmetric_calc_t.sl_halfcycle_sum_present +\
+    599                      asymmetric_calc_t.sl_halfcycle_sum_previous;
+   \   000020   1E42....     MOV.W   &asymmetric_calc_t, R14
+   \   000024   1F42....     MOV.W   &asymmetric_calc_t + 2, R15
+   \   000028   1E52....     ADD.W   &asymmetric_calc_t + 4, R14
+   \   00002C   1F62....     ADDC.W  &asymmetric_calc_t + 6, R15
+   \   000030   084E         MOV.W   R14, R8
+   \   000032   094F         MOV.W   R15, R9
+    600          
+    601                  /*
+    602                  If the resultant count is negative, then convert the number into positive
+    603                  */
+    604                  if (ZERO > sl_full_cycle_count)
+   \   000034   0993         CMP.W   #0x0, R9
+   \   000036   0434         JGE     ??measurement_asymmetric_computation_1
+    605                  {
+    606                      sl_full_cycle_count = (~sl_full_cycle_count)+1;
+   \   000038   38E3         XOR.W   #0xffff, R8
+   \   00003A   39E3         XOR.W   #0xffff, R9
+   \   00003C   1853         ADD.W   #0x1, R8
+   \   00003E   0963         ADDC.W  #0x0, R9
+    607                  }
+    608                  /*
+    609                  Find the DC average
+    610                  */
+    611                  sl_full_cycle_count >>=4;
+   \                     ??measurement_asymmetric_computation_1:
+   \   000040   0911         RRA.W   R9
+   \   000042   0810         RRC.W   R8
+   \   000044   0911         RRA.W   R9
+   \   000046   0810         RRC.W   R8
+   \   000048   0911         RRA.W   R9
+   \   00004A   0810         RRC.W   R8
+   \   00004C   0911         RRA.W   R9
+   \   00004E   0810         RRC.W   R8
+    612          
+    613                  /*
+    614                  Compute the square of DC average
+    615                  */
+    616                  ul_dc_square = sl_full_cycle_count * sl_full_cycle_count;
+   \   000050   0C48         MOV.W   R8, R12
+   \   000052   0D49         MOV.W   R9, R13
+   \   000054   0E48         MOV.W   R8, R14
+   \   000056   0F49         MOV.W   R9, R15
+   \   000058   B012....     CALL    #?Mul32
+   \   00005C   064C         MOV.W   R12, R6
+   \   00005E   074D         MOV.W   R13, R7
+    617          
+    618                  /*
+    619                  Check for symmetric inrush
+    620                  */
+    621                  if (ul_dc_square > ul_meansquare_threshold)
+   \   000060   0B97         CMP.W   R7, R11
+   \   000062   0328         JNC     ??measurement_asymmetric_computation_2
+   \   000064   0520         JNE     ??measurement_asymmetric_computation_3
+   \   000066   0A96         CMP.W   R6, R10
+   \   000068   032C         JC      ??measurement_asymmetric_computation_3
+    622                  {
+    623                      /*
+    624                      If the inrusg exist, then set the inrush flag
+    625                      */
+    626                      g_uc_asymmetric_inrush = TRUE;
+   \                     ??measurement_asymmetric_computation_2:
+   \   00006A   D243....     MOV.B   #0x1, &g_uc_asymmetric_inrush
+   \   00006E   023C         JMP     ??measurement_asymmetric_computation_0
+    627                  }
+    628                  else
+    629                  {
+    630                      /*
+    631                      If the inrush doesn't exist, then reset the inrush flag
+    632                      */
+    633                      g_uc_asymmetric_inrush = FALSE;
+   \                     ??measurement_asymmetric_computation_3:
+   \   000070   C243....     MOV.B   #0x0, &g_uc_asymmetric_inrush
+    634                  }
+    635              }
+    636          
+    637              /*
+    638              Preserve the present cycle count
+    639              */
+    640              asymmetric_calc_t.sl_halfcycle_sum_previous = \
+    641              asymmetric_calc_t.sl_halfcycle_sum_present;
+   \                     ??measurement_asymmetric_computation_0:
+   \   000074   9242........ MOV.W   &asymmetric_calc_t, &asymmetric_calc_t + 4
+   \   00007A   9242........ MOV.W   &asymmetric_calc_t + 2, &asymmetric_calc_t + 6
+    642              /*
+    643              Clear the present cycle count
+    644              */
+    645              asymmetric_calc_t.sl_halfcycle_sum_present = CLEAR;
+   \   000080   8243....     MOV.W   #0x0, &asymmetric_calc_t
+   \   000084   8243....     MOV.W   #0x0, &asymmetric_calc_t + 2
+    646          }
+   \   000088   3040....     BR      #?Epilogue6
+    647          /*******************************************************************************
+    648          ** Function Name : measurement_cmpt_hrly_log_rms ()
+    649          ** Description   : This function will be executed once in a hour. This
+    650          **                 function will update the last one hour average and
+    651          **                 max MS to the system control variable and set the hourly log
+    652          **                 timer event.
+    653          **
+    654          ** Argument      : void
+    655          ** Return        : void
+    656          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    657          void measurement_cmpt_hrly_log_rms (void)
+   \                     measurement_cmpt_hrly_log_rms:
+    658          {
+    659              /*
+    660              Transfer the content of local variables to system control structure
+    661              */
+    662              hourly_log_t.ul_last_hour_max = ul_last_hour_max;
+   \   000000   9242........ MOV.W   &ul_last_hour_max, &hourly_log_t + 8
+   \   000006   9242........ MOV.W   &ul_last_hour_max + 2, &hourly_log_t + 10
+    663              hourly_log_t.ull_last_hour_avg = ull_last_hour_avg;
+   \   00000C   9242........ MOV.W   &ull_last_hour_avg, &hourly_log_t
+   \   000012   9242........ MOV.W   &ull_last_hour_avg + 2, &hourly_log_t + 2
+   \   000018   9242........ MOV.W   &ull_last_hour_avg + 4, &hourly_log_t + 4
+   \   00001E   9242........ MOV.W   &ull_last_hour_avg + 6, &hourly_log_t + 6
+    664          
+    665              /*
+    666              Clear the local structure for next hour computation
+    667              */
+    668              ul_last_hour_max = CLEAR;
+   \   000024   8243....     MOV.W   #0x0, &ul_last_hour_max
+   \   000028   8243....     MOV.W   #0x0, &ul_last_hour_max + 2
+    669              ull_last_hour_avg = CLEAR;
+   \   00002C   8243....     MOV.W   #0x0, &ull_last_hour_avg
+   \   000030   8243....     MOV.W   #0x0, &ull_last_hour_avg + 2
+   \   000034   8243....     MOV.W   #0x0, &ull_last_hour_avg + 4
+   \   000038   8243....     MOV.W   #0x0, &ull_last_hour_avg + 6
+    670          
+    671              /*
+    672              Set the one hour timer event
+    673              */
+    674              g_ui_timer_event |= HOURLY_LOG_TIMER_EVENT;
+   \   00003C   B2D04000.... BIS.W   #0x40, &g_ui_timer_event
+    675          
+    676              /*
+    677              Set the first hour cross over flag
+    678              */
+    679              g_uc_first_hour_crossover = TRUE;
+   \   000042   D243....     MOV.B   #0x1, &g_uc_first_hour_crossover
+    680          
+    681              /*
+    682              Clear the half cycle count
+    683              */
+    684              g_ul_half_cycle_count = CLEAR;
+   \   000046   8243....     MOV.W   #0x0, &g_ul_half_cycle_count
+   \   00004A   8243....     MOV.W   #0x0, &g_ul_half_cycle_count + 2
+    685          
+    686              /*
+    687              Clear the 10 second half cycle count
+    688              */
+    689              g_ul_half_cycle_count_10sec  = CLEAR;
+   \   00004E   8243....     MOV.W   #0x0, &g_ul_half_cycle_count_10sec
+   \   000052   8243....     MOV.W   #0x0, &g_ul_half_cycle_count_10sec + 2
+    690          
+    691              /*
+    692              Reset the UI mean square average reset flag
+    693              */
+    694              g_uc_avg_ui_reset = FALSE;
+   \   000056   C243....     MOV.B   #0x0, &g_uc_avg_ui_reset
+    695          
+    696              /*
+    697              Reset the UI mean square max reset flag
+    698              */
+    699              g_uc_max_ui_reset = FALSE;
+   \   00005A   C243....     MOV.B   #0x0, &g_uc_max_ui_reset
+    700              
+    701              /*
+    702              Clear the 10sec computation
+    703              */
+    704              g_ull_avg_10s_ui = CLEAR;
+   \   00005E   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui
+   \   000062   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui + 2
+   \   000066   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui + 4
+   \   00006A   8243....     MOV.W   #0x0, &g_ull_avg_10s_ui + 6
+    705              g_ul_max_10s_ui = CLEAR;
+   \   00006E   8243....     MOV.W   #0x0, &g_ul_max_10s_ui
+   \   000072   8243....     MOV.W   #0x0, &g_ul_max_10s_ui + 2
+    706          }
+   \   000076   3041         RET
+    707          
+    708          
+    709          /*******************************************************************************
+    710          ** Function Name : measurement_solenoid_pulse_timer()
+    711          ** Description   : This function will be executed at the sample rate. This
+    712          **                 function will status of solenoid pulse timer. If timer is
+    713          **                 armed, then the timer counter will incremented. The timer
+    714          **                 overflow flag is set when the timer counter is euqal to timer
+    715          **                 period.
+    716          **
+    717          ** Argument      : void
+    718          ** Return        : void
+    719          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    720          static inline void measurement_solenoid_pulse_timer (void)
+   \                     measurement_solenoid_pulse_timer:
+    721          {
+    722              uint16_t ui_temp;
+    723              if (RUNNING == g_uc_sol_pulse_timer_status)
+   \   000000   E293....     CMP.B   #0x2, &g_uc_sol_pulse_timer_status
+   \   000004   0C20         JNE     ??measurement_solenoid_pulse_timer_0
+    724              {
+    725                  g_ui_sol_pulse_timer_counter++;
+   \   000006   9253....     ADD.W   #0x1, &g_ui_sol_pulse_timer_counter
+    726                  ui_temp = g_ui_sol_pulse_timer_period;
+   \   00000A   1F42....     MOV.W   &g_ui_sol_pulse_timer_period, R15
+    727                  if (g_ui_sol_pulse_timer_counter >= ui_temp)
+   \   00000E   829F....     CMP.W   R15, &g_ui_sol_pulse_timer_counter
+   \   000012   0528         JNC     ??measurement_solenoid_pulse_timer_0
+    728                  {
+    729                      g_uc_sol_pulse_timer_status = OVERFLOW;
+   \   000014   F2400300.... MOV.B   #0x3, &g_uc_sol_pulse_timer_status
+    730                      g_ui_sol_pulse_timer_counter = ZERO;
+   \   00001A   8243....     MOV.W   #0x0, &g_ui_sol_pulse_timer_counter
+    731                  }
+    732              }
+    733          
+    734              if (RUNNING == g_uc_lock_sol_pulse_timer_status)
+   \                     ??measurement_solenoid_pulse_timer_0:
+   \   00001E   E293....     CMP.B   #0x2, &g_uc_lock_sol_pulse_timer_status
+   \   000022   0C20         JNE     ??measurement_solenoid_pulse_timer_1
+    735              {
+    736                  g_ui_lock_sol_pulse_timer_counter++;
+   \   000024   9253....     ADD.W   #0x1, &g_ui_lock_sol_pulse_timer_counter
+    737                  ui_temp = g_ui_lock_sol_pulse_timer_period;
+   \   000028   1F42....     MOV.W   &g_ui_lock_sol_pulse_timer_period, R15
+    738                  if (g_ui_lock_sol_pulse_timer_counter >= ui_temp)
+   \   00002C   829F....     CMP.W   R15, &g_ui_lock_sol_pulse_timer_counter
+   \   000030   0528         JNC     ??measurement_solenoid_pulse_timer_1
+    739                  {
+    740                      g_uc_lock_sol_pulse_timer_status = OVERFLOW;
+   \   000032   F2400300.... MOV.B   #0x3, &g_uc_lock_sol_pulse_timer_status
+    741                      g_ui_lock_sol_pulse_timer_counter = ZERO;
+   \   000038   8243....     MOV.W   #0x0, &g_ui_lock_sol_pulse_timer_counter
+    742                  }
+    743              }
+    744          }
+   \                     ??measurement_solenoid_pulse_timer_1:
+   \   00003C   3041         RET
+    745          
+    746          /*******************************************************************************
+    747          ** Function Name : measurement_shutdown_adc()
+    748          ** Description   : This function turn off the adc and set the adc halt flag.
+    749          **
+    750          ** Argument      : void
+    751          ** Return        : void
+    752          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    753          void measurement_shutdown_adc(void)
+   \                     measurement_shutdown_adc:
+    754          {
+    755              /*
+    756              Disable ADC
+    757              */
+    758              DISABLE_ADC_CONVERSION;
+   \   000000   A2C3A001     BIC.W   #0x2, &0x1a0
+    759              DISARM_THE_ADC;
+   \   000004   B2C01000A001 BIC.W   #0x10, &0x1a0
+    760              DISABLE_ADC_INTERRUPT;
+   \   00000A   A2C3A601     BIC.W   #0x2, &0x1a6
+    761          
+    762              /*
+    763              Set the ADC halt flag
+    764              */
+    765              g_uc_adc_halted = TRUE;
+   \   00000E   D243....     MOV.B   #0x1, &g_uc_adc_halted
+    766          }
+   \   000012   3041         RET
+   \   000014                REQUIRE ADC12CTL0
+   \   000014                REQUIRE ADC12IE
+    767          
+    768          /*******************************************************************************
+    769          ** Function Name : measurement_10sec_computation()
+    770          ** Description   : This function will be executed once in every 10 second. This
+    771          **                 function will update the last 10 second average and
+    772          **                 max MS to the system control variable and set the 10 second
+    773          **                 timer event.
+    774          **
+    775          ** Argument      : void
+    776          ** Return        : void
+    777          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    778          void measurement_10sec_computation (void)
+   \                     measurement_10sec_computation:
+    779          {
+    780              /*
+    781              Check for the 10 second cross over
+    782              */
+    783              if ((g_ul_half_cycle_count_10sec % NO_OF_HALF_CYCLE_COMP_IN_10_SEC) \
+    784                      == ZERO)
+   \   000000   1C42....     MOV.W   &g_ul_half_cycle_count_10sec, R12
+   \   000004   1D42....     MOV.W   &g_ul_half_cycle_count_10sec + 2, R13
+   \   000008   3E40B004     MOV.W   #0x4b0, R14
+   \   00000C   0F43         MOV.W   #0x0, R15
+   \   00000E   B012....     CALL    #?DivMod32u
+   \   000012   0D4E         MOV.W   R14, R13
+   \   000014   0DDF         BIS.W   R15, R13
+   \   000016   0D93         CMP.W   #0x0, R13
+   \   000018   2120         JNE     ??measurement_10sec_computation_0
+    785              {
+    786                  /*
+    787                  Transfer the content of local variables to system control structure
+    788                  */
+    789                  if (TRUE == g_uc_avg_ui_reset)
+   \   00001A   D293....     CMP.B   #0x1, &g_uc_avg_ui_reset
+   \   00001E   1220         JNE     ??measurement_10sec_computation_1
+    790                  {
+    791                      hourly_log_t.ull_last_hour_avg = g_ull_avg_10s_ui;
+   \   000020   9242........ MOV.W   &g_ull_avg_10s_ui, &hourly_log_t
+   \   000026   9242........ MOV.W   &g_ull_avg_10s_ui + 2, &hourly_log_t + 2
+   \   00002C   9242........ MOV.W   &g_ull_avg_10s_ui + 4, &hourly_log_t + 4
+   \   000032   9242........ MOV.W   &g_ull_avg_10s_ui + 6, &hourly_log_t + 6
+    792                      g_ul_10_sec_half_cycle_count = g_ul_half_cycle_count_10sec;
+   \   000038   9242........ MOV.W   &g_ul_half_cycle_count_10sec, &g_ul_10_sec_half_cycle_count
+   \   00003E   9242........ MOV.W   &g_ul_half_cycle_count_10sec + 2, &g_ul_10_sec_half_cycle_count + 2
+    793                  }
+    794          
+    795                  if (TRUE == g_uc_max_ui_reset)
+   \                     ??measurement_10sec_computation_1:
+   \   000044   D293....     CMP.B   #0x1, &g_uc_max_ui_reset
+   \   000048   0620         JNE     ??measurement_10sec_computation_2
+    796                  {
+    797                      hourly_log_t.ul_last_hour_max = g_ul_max_10s_ui;
+   \   00004A   9242........ MOV.W   &g_ul_max_10s_ui, &hourly_log_t + 8
+   \   000050   9242........ MOV.W   &g_ul_max_10s_ui + 2, &hourly_log_t + 10
+    798                  }
+    799                  /*
+    800                  Set the 10sec timer event
+    801                  */
+    802                  g_ui_timer_event |= TEN_SECOND_TIMER_EVENT;
+   \                     ??measurement_10sec_computation_2:
+   \   000056   B2D00001.... BIS.W   #0x100, &g_ui_timer_event
+    803              }
+    804          }
+   \                     ??measurement_10sec_computation_0:
+   \   00005C   3041         RET
+
+   Maximum stack usage in bytes:
+
+     Function                       CSTACK
+     --------                       ------
+     measurement_10sec_computation      2
+     measurement_asymmetric_computation
+                                       14
+     measurement_cmpt_hrly_log_rms      2
+     measurement_halfcycle_activity    10
+       -> measurement_cmpt_hrly_log_rms
+                                       10
+       -> measurement_10sec_computation
+                                       10
+     measurement_init                   2
+       -> memset                        2
+     measurement_initadc                2
+     measurement_readadc                4
+       -> measurement_sample_activity
+                                        4
+       -> measurement_solenoid_pulse_timer
+                                        4
+     measurement_reset_hourly_data      2
+     measurement_sample_activity        4
+       -> measurement_halfcycle_activity
+                                        4
+       -> measurement_asymmetric_computation
+                                        4
+       -> protection_tcc_accumulation
+                                        4
+     measurement_shutdown_adc           2
+     measurement_solenoid_pulse_timer
+                                        2
+
+
+   Segment part sizes:
+
+     Function/Label                 Bytes
+     --------------                 -----
+     ADC12CTL0                         2
+     ADC12CTL1                         2
+     ADC12IFG                          2
+     ADC12IE                           2
+     ADC12MEM0                         2
+     ADC12MEM1                         2
+     ADC12MCTL1                        1
+     g_ul_meansquarecurrent            4
+     g_uc_gain_index                   1
+     g_ul_sample_time_counter          4
+     g_uc_asymmetric_inrush            1
+     g_ul_10_sec_half_cycle_count      4
+     g_uc_low_power_exit               1
+     g_ul_half_cycle_count             4
+     g_uc_fault_current                1
+     g_ul_half_cycle_count_10sec       4
+     g_ull_avg_10s_ui                  8
+     g_ul_max_10s_ui                   4
+     uia_gain_factor                  10
+     asymmetric_calc_t                 8
+     ui_gain                           2
+     ul_sample_square                  4
+     ul_ping_sos                       4
+     ul_pong_sos                       4
+     uc_sample_count                   1
+     uc_sos_select                     1
+     ull_last_hour_avg                 8
+     ul_last_hour_max                  4
+     uc_first_cycle_crossed            1
+     measurement_initadc              50
+     measurement_reset_hourly_data    66
+     measurement_init                 96
+     measurement_readadc              54
+     measurement_sample_activity     246
+     measurement_halfcycle_activity  466
+     measurement_asymmetric_computation
+                                     140
+     measurement_cmpt_hrly_log_rms   120
+     measurement_solenoid_pulse_timer
+                                      62
+     measurement_shutdown_adc         20
+     measurement_10sec_computation    94
+
+ 
+ 1 414 bytes in segment CODE
+    13 bytes in segment DATA16_AN
+    10 bytes in segment DATA16_C
+    73 bytes in segment DATA16_N
+ 
+ 1 414 bytes of CODE  memory
+    10 bytes of CONST memory
+    73 bytes of DATA  memory (+ 13 bytes shared)
+
+Errors: none
+Warnings: 4

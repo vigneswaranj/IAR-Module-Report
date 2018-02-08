@@ -1,0 +1,479 @@
+###############################################################################
+#                                                                             #
+# IAR C/C++ Compiler V5.10.1.50144/W32 for MSP430       04/Jan/2018  16:34:17 #
+# Copyright 1996-2010 IAR Systems AB.                                         #
+#                                                                             #
+#    __rt_version  =  3                                                       #
+#    __double_size =  32                                                      #
+#    __reg_r4      =  free                                                    #
+#    __reg_r5      =  free                                                    #
+#    __pic         =  no                                                      #
+#    __core        =  430                                                     #
+#    Source file   =  E:\VT1 V4.95\FW\VT1\Source\datalog.c                    #
+#    Command line  =  "E:\VT1 V4.95\FW\VT1\Source\datalog.c" -lCN "E:\VT1     #
+#                     V4.95\FW\VT1\Debug\List\" -la "E:\VT1                   #
+#                     V4.95\FW\VT1\Debug\List\" -o "E:\VT1                    #
+#                     V4.95\FW\VT1\Debug\Obj\" --no_cse --no_unroll           #
+#                     --no_inline --no_code_motion --no_tbaa --debug          #
+#                     -D__MSP430F149__ -e --double=32 --dlib_config           #
+#                     "C:\Program Files (x86)\IAR Systems\Embedded Workbench  #
+#                     6.0\430\LIB\DLIB\dl430fn.h" -I "E:\VT1                  #
+#                     V4.95\FW\VT1\Header\" -On --multiplier=16               #
+#    List file     =  E:\VT1 V4.95\FW\VT1\Debug\List\datalog.lst              #
+#    Object file   =  E:\VT1 V4.95\FW\VT1\Debug\Obj\datalog.r43               #
+#                                                                             #
+#                                                                             #
+###############################################################################
+
+E:\VT1 V4.95\FW\VT1\Source\datalog.c
+      1          /** @file name - datalog.c
+      2          *
+      3          * @description - This file contains the data log initialization , data log info
+      4          *                handling, data log Write and Erase modules.
+      5          *
+      6          * Versa-Tech I Single-Phase Recloser - Hubbell Power Systems, Inc.
+      7          * This code is the intellectual property of Hubbell Power Systems, Inc. and
+      8          * it should not be used, reproduced, modified in any manner by anyone else.
+      9          *
+     10          * @ Project ID  - UA002
+     11          * @ Author      - Hubbell India
+     12          * @ Version     - v4.x LPM
+     13          * @ Date        - 27 Sep 2017
+     14          **/
+     15          
+     16          /*****************************************************************************
+     17          * Includes
+     18          *****************************************************************************/
+     19          #include <msp430.h>
+     20          #include <stdint.h>
+     21          
+     22          #include "projectdef.h"
+     23          #include "flash.h"
+     24          #include "rtc.h"
+     25          #include "datalog.h"
+     26          
+     27          /*****************************************************************************
+     28          * Global Variables
+     29          *****************************************************************************/
+     30          /* This structure will contain the data log information details */
+
+   \                                 In  segment DATA16_Z, align 1, align-sorted
+   \   000000                REQUIRE ?cstart_init_zero
+     31          st_datalog_info_t datalog_info_t;
+   \                     datalog_info_t:
+   \   000000                DS8 5
+     32          
+     33          /*****************************************************************************
+     34          * Local and Static Variables
+     35          *****************************************************************************/
+     36          
+     37          /*****************************************************************************
+     38          * Static Functions
+     39          *****************************************************************************/
+     40          static void datalog_sector_overflow_handle (uint16_t const);
+     41          
+     42          /*******************************************************************************
+     43          ** Function Name : datalog_init
+     44          ** Description   : Validates the signature during powerup and updates the
+     45          **                 datalog index for accesing the datalog. The datalogs are
+     46          **                 erased if the signature validation fails.
+     47          ** Argument      : void
+     48          ** Return        : void
+     49          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+     50          void datalog_init (void)
+   \                     datalog_init:
+     51          {
+     52              /* Read the datalog info from flash */
+     53              flash_read ((&datalog_info_t),                                             \
+     54                          (void *) DATALOGID_FLASH_SECTOR_START_ADDRESS,                 \
+     55                           sizeof(st_datalog_info_t));
+   \   000000   3E400500     MOV.W   #0x5, R14
+   \   000004   3D400040     MOV.W   #0x4000, R13
+   \   000008   3C40....     MOV.W   #datalog_info_t, R12
+   \   00000C   B012....     CALL    #flash_read
+     56              
+     57              /* Validate the signature read from flash */
+     58              if (DATALOGID_STORAGE_SECTOR_SIGNATURE != datalog_info_t.uc_signature)
+   \   000010   F290AA00.... CMP.B   #0xaa, &datalog_info_t
+   \   000016   0224         JEQ     ??datalog_init_0
+     59              {
+     60                  /* Erase the datalog if the signature is invalid */
+     61                  datalog_erase ();
+   \   000018   B012....     CALL    #datalog_erase
+     62              }
+     63          }
+   \                     ??datalog_init_0:
+   \   00001C   3041         RET
+     64          
+     65          /*******************************************************************************
+     66          ** Function Name : datalog_erase
+     67          ** Description   : Erases the datalogs stored in the flash and also resets
+     68          **                 the index value.
+     69          ** Argument      : void
+     70          ** Return        : void
+     71          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+     72          void datalog_erase (void)
+   \                     datalog_erase:
+     73          {
+   \   000000   0A12         PUSH.W  R10
+   \   000002   0B12         PUSH.W  R11
+     74              uint8_t ucloopcnt;
+     75              uint16_t psector_boundary = DATALOG_FLASH_START_ADDRESS;;
+   \   000004   3A400012     MOV.W   #0x1200, R10
+     76          
+     77              /* Erase the datalog sectors in the flash */
+     78              for (ucloopcnt = CLEAR; ucloopcnt < DATALOG_SECTORS_COUNT; ucloopcnt++)
+   \   000008   4B43         MOV.B   #0x0, R11
+   \                     ??datalog_erase_0:
+   \   00000A   7B901700     CMP.B   #0x17, R11
+   \   00000E   072C         JC      ??datalog_erase_1
+     79              {
+     80                  flash_erase ((uint8_t *) psector_boundary);
+   \   000010   0C4A         MOV.W   R10, R12
+   \   000012   B012....     CALL    #flash_erase
+     81                  psector_boundary += DATALOG_SECTOR_OFFSET;
+   \   000016   3A500002     ADD.W   #0x200, R10
+     82              }
+   \   00001A   5B53         ADD.B   #0x1, R11
+   \   00001C   F63F         JMP     ??datalog_erase_0
+     83          
+     84              /* Erase the datlog info sectors in the flash */
+     85              flash_erase ((uint8_t *) DATALOGID_FLASH_SECTOR_START_ADDRESS);
+   \                     ??datalog_erase_1:
+   \   00001E   3C400040     MOV.W   #0x4000, R12
+   \   000022   B012....     CALL    #flash_erase
+     86          
+     87              /* Update the datalog info structure */
+     88              datalog_info_t.uc_signature = DATALOGID_STORAGE_SECTOR_SIGNATURE;
+   \   000026   F240AA00.... MOV.B   #0xaa, &datalog_info_t
+     89              datalog_info_t.ul_latest_id = UNSIGNED_LONG_MAX;
+   \   00002C   3E43         MOV.W   #0xffff, R14
+   \   00002E   3F43         MOV.W   #0xffff, R15
+   \   000030   4D4E         MOV.B   R14, R13
+   \   000032   8E10         SWPB    R14
+   \   000034   3EF0FF00     AND.W   #0xff, R14
+   \   000038   C24D....     MOV.B   R13, &datalog_info_t + 1
+   \   00003C   C24E....     MOV.B   R14, &datalog_info_t + 2
+   \   000040   4E4F         MOV.B   R15, R14
+   \   000042   8F10         SWPB    R15
+   \   000044   3FF0FF00     AND.W   #0xff, R15
+   \   000048   C24E....     MOV.B   R14, &datalog_info_t + 3
+   \   00004C   C24F....     MOV.B   R15, &datalog_info_t + 4
+     90          
+     91              /* Write the datalog info structure to flash */
+     92              flash_write ((uint8_t *) DATALOGID_FLASH_SECTOR_START_ADDRESS,             \
+     93                           (uint8_t *)(&datalog_info_t),                                 \
+     94                            sizeof(st_datalog_info_t));
+   \   000050   3E400500     MOV.W   #0x5, R14
+   \   000054   3D40....     MOV.W   #datalog_info_t, R13
+   \   000058   3C400040     MOV.W   #0x4000, R12
+   \   00005C   B012....     CALL    #flash_write
+     95          }
+   \   000060   3B41         POP.W   R11
+   \   000062   3A41         POP.W   R10
+   \   000064   3041         RET
+     96          
+     97          /*******************************************************************************
+     98          ** Function Name : datalog_write
+     99          ** Description   : Gets the index value increments it and stores the given
+    100          **                 datalog to flash. The updated index value is also stored to
+    101          **                 the flash.
+    102          ** Argument      : st_datalog_t * - The datalog pointer holding the data that
+    103          **                                  has to be written to flash.
+    104          ** Return        : void
+    105          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    106          void datalog_write (uint16_t const uiavg_rms, uint16_t const uipeak_rms)
+   \                     datalog_write:
+    107          {
+   \   000000   0A12         PUSH.W  R10
+   \   000002   0B12         PUSH.W  R11
+   \   000004   0812         PUSH.W  R8
+   \   000006   31800A00     SUB.W   #0xa, SP
+   \   00000A   0A4C         MOV.W   R12, R10
+   \   00000C   0B4D         MOV.W   R13, R11
+    108              st_datalog_t datalog_t;
+    109              uint16_t uicurrent_address;
+    110          
+    111              /* Update the RTC time to datalog structure */
+    112              datalog_t.uc_year = soft_rtc_time_t.uc_year;
+   \   00000E   D142....0400 MOV.B   &soft_rtc_time_t, 0x4(SP)
+    113              datalog_t.uc_month = soft_rtc_time_t.uc_month;
+   \   000014   D142....0500 MOV.B   &soft_rtc_time_t + 1, 0x5(SP)
+    114              datalog_t.uc_date = soft_rtc_time_t.uc_date;
+   \   00001A   D142....0600 MOV.B   &soft_rtc_time_t + 2, 0x6(SP)
+    115              datalog_t.uc_hour = soft_rtc_time_t.uc_hour;
+   \   000020   D142....0700 MOV.B   &soft_rtc_time_t + 3, 0x7(SP)
+    116              datalog_t.uc_minute = soft_rtc_time_t.uc_minute;
+   \   000026   D142....0800 MOV.B   &soft_rtc_time_t + 4, 0x8(SP)
+    117              datalog_t.uc_second = soft_rtc_time_t.uc_second;
+   \   00002C   D142....0900 MOV.B   &soft_rtc_time_t + 5, 0x9(SP)
+    118          
+    119              /* Update the received average rms value to datalog structure */
+    120              datalog_t.ui_average_rms = uiavg_rms;
+   \   000032   0F4A         MOV.W   R10, R15
+   \   000034   4E4F         MOV.B   R15, R14
+   \   000036   8F10         SWPB    R15
+   \   000038   3FF0FF00     AND.W   #0xff, R15
+   \   00003C   C14E0000     MOV.B   R14, 0(SP)
+   \   000040   C14F0100     MOV.B   R15, 0x1(SP)
+    121          
+    122              /* Update the received peak rms value to datalog structure */
+    123              datalog_t.ui_peak_rms = uipeak_rms;
+   \   000044   0F4B         MOV.W   R11, R15
+   \   000046   4E4F         MOV.B   R15, R14
+   \   000048   8F10         SWPB    R15
+   \   00004A   3FF0FF00     AND.W   #0xff, R15
+   \   00004E   C14E0200     MOV.B   R14, 0x2(SP)
+   \   000052   C14F0300     MOV.B   R15, 0x3(SP)
+    124          
+    125              /* Read the RTC time and update in event log structure */
+    126          
+    127              /* Calculate the next datalog address in flash */
+    128              uicurrent_address = datalog_current_index (datalog_info_t.ul_latest_id + 1);
+   \   000056   5C42....     MOV.B   &datalog_info_t + 1, R12
+   \   00005A   4C4C         MOV.B   R12, R12
+   \   00005C   5F42....     MOV.B   &datalog_info_t + 2, R15
+   \   000060   4F4F         MOV.B   R15, R15
+   \   000062   3FF0FF00     AND.W   #0xff, R15
+   \   000066   8F10         SWPB    R15
+   \   000068   0CDF         BIS.W   R15, R12
+   \   00006A   5D42....     MOV.B   &datalog_info_t + 3, R13
+   \   00006E   4D4D         MOV.B   R13, R13
+   \   000070   5F42....     MOV.B   &datalog_info_t + 4, R15
+   \   000074   4F4F         MOV.B   R15, R15
+   \   000076   3FF0FF00     AND.W   #0xff, R15
+   \   00007A   8F10         SWPB    R15
+   \   00007C   0DDF         BIS.W   R15, R13
+   \   00007E   1C53         ADD.W   #0x1, R12
+   \   000080   0D63         ADDC.W  #0x0, R13
+   \   000082   B012....     CALL    #datalog_current_index
+   \   000086   084C         MOV.W   R12, R8
+    129          
+    130              /* Validate sector overflow for the calculated address */
+    131              datalog_sector_overflow_handle (uicurrent_address);
+   \   000088   0C48         MOV.W   R8, R12
+   \   00008A   B012....     CALL    #datalog_sector_overflow_handle
+    132          
+    133              /* Store the given datalog in the flash */
+    134              flash_write ((uint8_t *) uicurrent_address,                                \
+    135                           (uint8_t *)(&datalog_t),                                      \
+    136                            sizeof(st_datalog_t));
+   \   00008E   3E400A00     MOV.W   #0xa, R14
+   \   000092   0D41         MOV.W   SP, R13
+   \   000094   0C48         MOV.W   R8, R12
+   \   000096   B012....     CALL    #flash_write
+    137          
+    138              /* Erase the datlog info sectors in the flash */
+    139              flash_erase ((uint8_t *) DATALOGID_FLASH_SECTOR_START_ADDRESS);
+   \   00009A   3C400040     MOV.W   #0x4000, R12
+   \   00009E   B012....     CALL    #flash_erase
+    140          
+    141              /* Update the datalog info structure */
+    142              datalog_info_t.uc_signature = DATALOGID_STORAGE_SECTOR_SIGNATURE;
+   \   0000A2   F240AA00.... MOV.B   #0xaa, &datalog_info_t
+    143              datalog_info_t.ul_latest_id++;
+   \   0000A8   5E42....     MOV.B   &datalog_info_t + 1, R14
+   \   0000AC   4E4E         MOV.B   R14, R14
+   \   0000AE   5F42....     MOV.B   &datalog_info_t + 2, R15
+   \   0000B2   4F4F         MOV.B   R15, R15
+   \   0000B4   3FF0FF00     AND.W   #0xff, R15
+   \   0000B8   8F10         SWPB    R15
+   \   0000BA   0EDF         BIS.W   R15, R14
+   \   0000BC   5F42....     MOV.B   &datalog_info_t + 3, R15
+   \   0000C0   4F4F         MOV.B   R15, R15
+   \   0000C2   5D42....     MOV.B   &datalog_info_t + 4, R13
+   \   0000C6   4D4D         MOV.B   R13, R13
+   \   0000C8   3DF0FF00     AND.W   #0xff, R13
+   \   0000CC   8D10         SWPB    R13
+   \   0000CE   0FDD         BIS.W   R13, R15
+   \   0000D0   1E53         ADD.W   #0x1, R14
+   \   0000D2   0F63         ADDC.W  #0x0, R15
+   \   0000D4   4D4E         MOV.B   R14, R13
+   \   0000D6   8E10         SWPB    R14
+   \   0000D8   3EF0FF00     AND.W   #0xff, R14
+   \   0000DC   C24D....     MOV.B   R13, &datalog_info_t + 1
+   \   0000E0   C24E....     MOV.B   R14, &datalog_info_t + 2
+   \   0000E4   4E4F         MOV.B   R15, R14
+   \   0000E6   8F10         SWPB    R15
+   \   0000E8   3FF0FF00     AND.W   #0xff, R15
+   \   0000EC   C24E....     MOV.B   R14, &datalog_info_t + 3
+   \   0000F0   C24F....     MOV.B   R15, &datalog_info_t + 4
+    144          
+    145              /* Write the datalog info structure to flash */
+    146              flash_write ((uint8_t *) DATALOGID_FLASH_SECTOR_START_ADDRESS,             \
+    147                           (uint8_t *)(&datalog_info_t),                                 \
+    148                            sizeof(st_datalog_info_t));
+   \   0000F4   3E400500     MOV.W   #0x5, R14
+   \   0000F8   3D40....     MOV.W   #datalog_info_t, R13
+   \   0000FC   3C400040     MOV.W   #0x4000, R12
+   \   000100   B012....     CALL    #flash_write
+    149          
+    150          }
+   \   000104   31500A00     ADD.W   #0xa, SP
+   \   000108   3040....     BR      #?Epilogue3
+    151          
+    152          /*******************************************************************************
+    153          ** Function Name : datalog_sector_overflow_handle
+    154          ** Description   : Calculates the sector overflow for flash write and  erases
+    155          **                 the next segment of flash.
+    156          ** Argument      : uicalculated_address - The given addrees for which the
+    157          **                 boundary condition is validated.
+    158          ** Return        : void.
+    159          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    160          static void datalog_sector_overflow_handle (uint16_t const uicalculated_address)
+   \                     datalog_sector_overflow_handle:
+    161          {
+   \   000000   0A12         PUSH.W  R10
+   \   000002   0B12         PUSH.W  R11
+   \   000004   0812         PUSH.W  R8
+   \   000006   0912         PUSH.W  R9
+   \   000008   0A4C         MOV.W   R12, R10
+    162              uint8_t ucsector_erased = FALSE;
+   \   00000A   4B43         MOV.B   #0x0, R11
+    163              uint8_t ucloopcnt = CLEAR;
+   \   00000C   4843         MOV.B   #0x0, R8
+    164              uint16_t uisector_boundary = DATALOG_FLASH_START_ADDRESS;
+   \   00000E   39400012     MOV.W   #0x1200, R9
+    165          
+    166              while ((ucloopcnt < DATALOG_SECTORS_COUNT) && (FALSE == ucsector_erased))
+   \                     ??datalog_sector_overflow_handle_0:
+   \   000012   78901700     CMP.B   #0x17, R8
+   \   000016   112C         JC      ??datalog_sector_overflow_handle_1
+   \   000018   4B93         CMP.B   #0x0, R11
+   \   00001A   0F20         JNE     ??datalog_sector_overflow_handle_1
+    167              {
+    168                  if (uisector_boundary >= uicalculated_address)
+   \   00001C   099A         CMP.W   R10, R9
+   \   00001E   0928         JNC     ??datalog_sector_overflow_handle_2
+    169                  {
+    170                      /* If the data has to be written in next segment then erase the
+    171                      segment */
+    172                      if ((uisector_boundary - uicalculated_address) <                   \
+    173                              sizeof(st_datalog_t))
+   \   000020   0F49         MOV.W   R9, R15
+   \   000022   0F8A         SUB.W   R10, R15
+   \   000024   3F900A00     CMP.W   #0xa, R15
+   \   000028   032C         JC      ??datalog_sector_overflow_handle_3
+    174                      {
+    175                          flash_erase ((uint8_t *) uisector_boundary);
+   \   00002A   0C49         MOV.W   R9, R12
+   \   00002C   B012....     CALL    #flash_erase
+    176                      }
+    177                      ucsector_erased = TRUE;
+   \                     ??datalog_sector_overflow_handle_3:
+   \   000030   5B43         MOV.B   #0x1, R11
+    178                  }
+    179                  uisector_boundary += DATALOG_SECTOR_OFFSET;
+   \                     ??datalog_sector_overflow_handle_2:
+   \   000032   39500002     ADD.W   #0x200, R9
+    180                  ucloopcnt++;
+   \   000036   5853         ADD.B   #0x1, R8
+   \   000038   EC3F         JMP     ??datalog_sector_overflow_handle_0
+    181              }
+    182          }
+   \                     ??datalog_sector_overflow_handle_1:
+   \   00003A   3040....     BR      #?Epilogue4
+    183          
+    184          /*******************************************************************************
+    185          ** Function Name : datalog_current_index
+    186          ** Description   : Calculates the datalog address based on the given index.
+    187          ** Argument      : ulindex_id - The index value for which the datalog address
+    188          **                 has to be calculated.
+    189          ** Return        : Returns the calculated datalog address.
+    190          *******************************************************************************/
+
+   \                                 In  segment CODE, align 2
+    191          uint16_t datalog_current_index (uint32_t const ulindex_id)
+   \                     datalog_current_index:
+    192          {
+   \   000000   0A12         PUSH.W  R10
+   \   000002   0812         PUSH.W  R8
+   \   000004   0912         PUSH.W  R9
+   \   000006   084C         MOV.W   R12, R8
+   \   000008   094D         MOV.W   R13, R9
+    193              uint16_t uidatalog_add;
+    194          
+    195              /* Calculate the address based on given index */
+    196              uidatalog_add = DATALOG_FLASH_START_ADDRESS +                              \
+    197                  ((ulindex_id % DATALOG_MAX_COUNTS) * sizeof(st_datalog_t));
+   \   00000A   0C48         MOV.W   R8, R12
+   \   00000C   0D49         MOV.W   R9, R13
+   \   00000E   3E409904     MOV.W   #0x499, R14
+   \   000012   0F43         MOV.W   #0x0, R15
+   \   000014   B012....     CALL    #?DivMod32u
+   \   000018   0E5E         RLA.W   R14
+   \   00001A   0F4E         MOV.W   R14, R15
+   \   00001C   0E5E         RLA.W   R14
+   \   00001E   0E5E         RLA.W   R14
+   \   000020   0E5F         ADD.W   R15, R14
+   \   000022   3E500012     ADD.W   #0x1200, R14
+   \   000026   0A4E         MOV.W   R14, R10
+    198          
+    199              if (DATALOG_MANIPULATED_FLASH_END_ADDRESS <= uidatalog_add)
+   \   000028   3A90F93F     CMP.W   #0x3ff9, R10
+   \   00002C   0228         JNC     ??datalog_current_index_0
+    200              {
+    201                  uidatalog_add = DATALOG_FLASH_START_ADDRESS;
+   \   00002E   3A400012     MOV.W   #0x1200, R10
+    202              }
+    203              return (uidatalog_add);
+   \                     ??datalog_current_index_0:
+   \   000032   0C4A         MOV.W   R10, R12
+   \   000034   3941         POP.W   R9
+   \   000036   3841         POP.W   R8
+   \   000038   3A41         POP.W   R10
+   \   00003A   3041         RET
+    204          }
+    205          /* ************************************************************************* */
+
+   Maximum stack usage in bytes:
+
+     Function                       CSTACK
+     --------                       ------
+     datalog_current_index              8
+     datalog_erase                      6
+       -> flash_erase                   6
+       -> flash_erase                   6
+       -> flash_write                   6
+     datalog_init                       2
+       -> flash_read                    2
+       -> datalog_erase                 2
+     datalog_sector_overflow_handle    10
+       -> flash_erase                  10
+     datalog_write                     18
+       -> datalog_current_index        18
+       -> datalog_sector_overflow_handle
+                                       18
+       -> flash_write                  18
+       -> flash_erase                  18
+       -> flash_write                  18
+
+
+   Segment part sizes:
+
+     Function/Label                 Bytes
+     --------------                 -----
+     datalog_info_t                    5
+     datalog_init                     30
+     datalog_erase                   102
+     datalog_write                   268
+     datalog_sector_overflow_handle   62
+     datalog_current_index            60
+
+ 
+ 522 bytes in segment CODE
+   5 bytes in segment DATA16_Z
+ 
+ 522 bytes of CODE memory
+   5 bytes of DATA memory
+
+Errors: none
+Warnings: none
