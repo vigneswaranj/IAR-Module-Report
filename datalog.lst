@@ -9,37 +9,11 @@
 #    __reg_r5      =  free                                                    #
 #    __pic         =  no                                                      #
 #    __core        =  430                                                     #
-#    Source file   =  E:\VT1 V4.95\FW\VT1\Source\datalog.c                    #
-#    Command line  =  "E:\VT1 V4.95\FW\VT1\Source\datalog.c" -lCN "E:\VT1     #
-#                     V4.95\FW\VT1\Debug\List\" -la "E:\VT1                   #
-#                     V4.95\FW\VT1\Debug\List\" -o "E:\VT1                    #
-#                     V4.95\FW\VT1\Debug\Obj\" --no_cse --no_unroll           #
-#                     --no_inline --no_code_motion --no_tbaa --debug          #
-#                     -D__MSP430F149__ -e --double=32 --dlib_config           #
-#                     "C:\Program Files (x86)\IAR Systems\Embedded Workbench  #
-#                     6.0\430\LIB\DLIB\dl430fn.h" -I "E:\VT1                  #
-#                     V4.95\FW\VT1\Header\" -On --multiplier=16               #
-#    List file     =  E:\VT1 V4.95\FW\VT1\Debug\List\datalog.lst              #
-#    Object file   =  E:\VT1 V4.95\FW\VT1\Debug\Obj\datalog.r43               #
-#                                                                             #
+     #
 #                                                                             #
 ###############################################################################
 
-E:\VT1 V4.95\FW\VT1\Source\datalog.c
-      1          /** @file name - datalog.c
-      2          *
-      3          * @description - This file contains the data log initialization , data log info
-      4          *                handling, data log Write and Erase modules.
-      5          *
-      6          * Versa-Tech I Single-Phase Recloser - Hubbell Power Systems, Inc.
-      7          * This code is the intellectual property of Hubbell Power Systems, Inc. and
-      8          * it should not be used, reproduced, modified in any manner by anyone else.
-      9          *
-     10          * @ Project ID  - UA002
-     11          * @ Author      - Hubbell India
-     12          * @ Version     - v4.x LPM
-     13          * @ Date        - 27 Sep 2017
-     14          **/
+
      15          
      16          /*****************************************************************************
      17          * Includes

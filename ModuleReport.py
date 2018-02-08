@@ -1,3 +1,6 @@
+# =====================================================================
+#   IAR List File Report Generator
+# =====================================================================
 import plotly
 import plotly.graph_objs as gra
 from array import *
@@ -6,7 +9,9 @@ import plotly.plotly as py
 
 Row = 0
 Column = 0
-
+# =====================================================================
+#   ModuleReport - Class definition
+# =====================================================================
 class ModuleReport():
 
     def __init__(self):
@@ -15,9 +20,9 @@ class ModuleReport():
         self.InputFile = ""
         self.NumOfColumn = 2
         self.ExtractFileName ="Module_Extract.txt"
-    # =====================================================================
-    #   Parse function/variable name and size
-    # =====================================================================
+# =====================================================================
+#   Parse function/variable name and size
+# =====================================================================
     def _plotgraph(self, Row, datatable):
         self.Row        = Row
         self.datatable  = datatable
@@ -35,11 +40,11 @@ class ModuleReport():
         layout  = Layout(title='IAR List File Analyser' )
         fig     = Figure(data=data,layout=layout)
 
-        plotly.offline.plot(fig, filename='Hubbel Module Report - ' + self.InputFile.replace(".lst","") + ".html")
+        plotly.offline.plot(fig, filename='IAR Module Report - ' + self.InputFile.replace(".lst","") + ".html")
 
-    # =====================================================================
-    #   Extract Segment Part Size information
-    # =====================================================================
+# =====================================================================
+#   Extract Segment Part Size information
+# =====================================================================
     def _extractSizeInfo(self, inputfilename):
         self.InputFile  = inputfilename
         filelist = open(self.InputFile, 'r')
@@ -66,27 +71,31 @@ class ModuleReport():
 
         resultfile.close()
         filelist.close()
+# =====================================================================
+#   ModuleReport - End of Class definition
+# =====================================================================
 
-
+# =====================================================================
+#   Main function
+# =====================================================================
 if __name__ == "__main__":
     import argparse
-
+	#Receive and parse the arguments
     parser = argparse.ArgumentParser(description="Extracts information from IAR List file and plot graph.")
     parser.add_argument("listfile", help="List file to parse.")
     args = parser.parse_args()
 
     if args.listfile == "":
         exit(0)
-
+	
+	#Start Parsing list file 
     PlotReport = ModuleReport()
     PlotReport._extractSizeInfo(args.listfile)
-# =====================================================================
-#   Parse function/variable name and size
-# =====================================================================
+
     resultfile = open(PlotReport.ExtractFileName, 'r')
     FilteredString = [0]  * PlotReport.NumOfColumn
     SizeTable = {}
-
+	#Search and find the module summary in list file
     for eachline in resultfile:
         if (eachline.find("-----") == -1):
             TempString = eachline.replace('\n','')
@@ -106,7 +115,7 @@ if __name__ == "__main__":
             Column = 0
 
     resultfile.close()
-
+	#Plot graph with the extracted information
     PlotReport._plotgraph(Row-1, SizeTable)
 # =====================================================================
 #   End of File

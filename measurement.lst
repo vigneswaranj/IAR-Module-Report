@@ -9,40 +9,11 @@
 #    __reg_r5      =  free                                                    #
 #    __pic         =  no                                                      #
 #    __core        =  430                                                     #
-#    Source file   =  E:\VT1 V4.95\FW\VT1\Source\measurement.c                #
-#    Command line  =  "E:\VT1 V4.95\FW\VT1\Source\measurement.c" -lCN         #
-#                     "E:\VT1 V4.95\FW\VT1\Debug\List\" -la "E:\VT1           #
-#                     V4.95\FW\VT1\Debug\List\" -o "E:\VT1                    #
-#                     V4.95\FW\VT1\Debug\Obj\" --no_cse --no_unroll           #
-#                     --no_inline --no_code_motion --no_tbaa --debug          #
-#                     -D__MSP430F149__ -e --double=32 --dlib_config           #
-#                     "C:\Program Files (x86)\IAR Systems\Embedded Workbench  #
-#                     6.0\430\LIB\DLIB\dl430fn.h" -I "E:\VT1                  #
-#                     V4.95\FW\VT1\Header\" -On --multiplier=16               #
-#    List file     =  E:\VT1 V4.95\FW\VT1\Debug\List\measurement.lst          #
-#    Object file   =  E:\VT1 V4.95\FW\VT1\Debug\Obj\measurement.r43           #
+       #
 #                                                                             #
 #                                                                             #
 ###############################################################################
 
-E:\VT1 V4.95\FW\VT1\Source\measurement.c
-      1          /** @file name - measurement.c
-      2          *
-      3          * @description - This module measures the line current and executes the
-      4          * asymmetric computational algorithm. The mean square current is calculated
-      5          * at the half cycle rate and the computated mean square is passed to the
-      6          * protection module and system control module.
-      7          *
-      8          *  Versa-Tech I Single-Phase Recloser - Hubbell Power Systems, Inc.
-      9          *  This code is the intellectual property of Hubbell Power Systems, Inc. and
-     10          *  it should not be used, reproduced, modified in any manner by anyone else.
-     11          *
-     12          * @ Project ID  : UA002
-     13          * @ Author      : Hubbell India
-     14          * @ Version     : 4.X LPM
-     15          * @ Date        : 25 Sep 2017
-     16          *
-     17          **/
      18          #include <msp430.h>
 
    \                                 In  segment DATA16_AN, at 0x1a0
@@ -79,16 +50,7 @@ E:\VT1 V4.95\FW\VT1\Source\measurement.c
    \   unsigned char volatile ADC12MCTL1
    \                     ADC12MCTL1:
    \   000000                DS8 1
-     19          #include <stdint.h>
-     20          #include <string.h>
-     21          
-     22          #include "projectdef.h"
-     23          #include "timer.h"
-     24          #include "protection.h"
-     25          #include "systemcontrol.h"
-     26          #include "configuration.h"
-     27          #include "measurement.h"
-     28          
+
      29          
      30          /*****************************************************************************
      31          * Global Variables
